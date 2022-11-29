@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "hvmcc",
+    "imp_hvm",
+    "js_imp",
+    "py_imp",
+]
+
