@@ -1,5 +1,6 @@
 use crate::imp::Id;
 use hvm::Term as Term;
+pub use hvm::syntax::Rule; // use hvm's native rule struct.
 
 pub enum Fun {
   Unit,
@@ -13,11 +14,6 @@ pub enum Fun {
   BinOp { op: Oper, left: Box<Fun>, right: Box<Fun> },
   Lambda { var: Id, body: Box<Fun> },
   MatchExpr { scrutinee: Box<Fun>, cases: Vec<CaseExpr> },
-}
-
-pub struct Rule {
-  lhs: Fun,
-  rhs: Fun,
 }
 
 pub struct CaseExpr {
