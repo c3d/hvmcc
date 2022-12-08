@@ -1,33 +1,36 @@
-use crate::imp::Id;
-use hvm::Term as Term;
-pub use hvm::syntax::Rule; // use hvm's native rule struct.
+pub use hvm::syntax::Oper;
 
-pub enum Fun {
+pub type Id = String;
+
+#[derive(Clone, Debug)]
+pub enum Expr {
   Unit,
-  Ctr { name: Id, args: Vec<Fun> }, // Datatype Haskell
-  FunCall { name: Id, args: Vec<Fun> }, // Function that pattern matches
-  Let { name: Id, expr: Box<Fun>, body: Box<Fun> },
-  App { expr: Box<Fun>, args: Box<Fun> },
+  Ctr { name: Id, args: Vec<Expr> }, // Datatype Haskell
+  FunCall { name: Id, args: Vec<Expr> }, // Function that pattern matches
+  Let { name: Id, expr: Box<Expr>, body: Box<Expr> },
+  App { expr: Box<Expr>, argm: Box<Expr> },
   Var { name: Id },
-  Number { numb: u64 },
+  Unsigned { numb: u64 },
   Float { numb: u64 }, 
-  BinOp { op: Oper, left: Box<Fun>, right: Box<Fun> },
-  Lambda { var: Id, body: Box<Fun> },
-  MatchExpr { scrutinee: Box<Fun>, cases: Vec<CaseExpr> },
+  BinOp { op: Oper, left: Box<Expr>, right: Box<Expr> },
+  Lambda { var: Id, body: Box<Expr> },
+  MatchExpr { scrutinee: Box<Expr>, cases: Vec<CaseExpr> },
 }
 
+#[derive(Clone, Debug)]
+pub struct Function {
+  pub name: Id,
+  pub rules: Vec<Rule>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Rule {
+  pub lhs: Box<Expr>,
+  pub rhs: Box<Expr>,
+}
+
+#[derive(Clone, Debug)]
 pub struct CaseExpr {
-  matched: Fun,
-  body: Fun,
-}
-
-pub fn fun_to_hvm(functional: Fun) -> Term {
-  todo!()
-}
-
-pub enum Oper {
-  Add, Sub, Mul, Div,
-  Mod, And, Or,  Xor,
-  Shl, Shr, Lte, Ltn,
-  Eql, Gte, Gtn, Neq,
+  pub matched: Box<Expr>,
+  pub body: Box<Expr>,
 }
