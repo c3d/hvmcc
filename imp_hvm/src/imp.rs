@@ -1,4 +1,4 @@
-use hvm::Term as Term;
+use crate::fun::Fun;
 
 pub type Id = String;
 
@@ -19,44 +19,19 @@ pub enum Imp {
   Pass,
 }
 
-pub enum Fun {
-  Unit,
-  Ctr { name: Id, args: Vec<Fun> }, // Datatype Haskell
-  FunCall { name: Id, args: Vec<Fun> }, // Function that pattern matches
-  Let { name: Id, expr: Box<Fun>, body: Box<Fun> },
-  App { expr: Box<Fun>, args: Box<Fun> },
-  Var { name: Id },
-  Number { numb: u64 },
-  Float { numb: u64 }, 
-  BinOp { op: Oper, left: Box<Fun>, right: Box<Fun> },
-  Lambda { var: Id, body: Box<Fun> },
-  MatchExpr { scrutinee: Box<Fun>, cases: Vec<CaseExpr> },
-}
-
-pub enum Oper {
-  Add, Sub, Mul, Div,
-  Mod, And, Or,  Xor,
-  Shl, Shr, Lte, Ltn,
-  Eql, Gte, Gtn, Neq,
-}
-
-pub struct Rule {
-  lhs: Fun,
-  rhs: Fun,
-}
-
 pub struct CaseStmt {
   matched: Fun,
   body: Imp,
-}
-
-pub struct CaseExpr {
-  matched: Fun,
-  body: Fun,
 }
 
 pub struct Procedure {
   name: Id,
   arguments: Vec<Id>,
   body: Imp,
+}
+
+pub type Program = Vec<Procedure>;
+
+pub fn imp_to_fun(imperative: Imp) -> Fun {
+  todo!()
 }
