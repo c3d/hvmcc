@@ -27,7 +27,7 @@ pub struct CaseStmt {
 #[derive(Clone, Debug)]
 pub struct Procedure {
   name: Id,
-  arguments: Vec<Id>,
+  args: Vec<Id>,
   body: Imp,
 }
 

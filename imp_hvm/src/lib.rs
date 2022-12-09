@@ -2,8 +2,9 @@ pub mod imp;
 pub mod fun;
 pub mod to_hvm;
 
-pub use crate::imp::{Imp, Procedure, Program};
-pub use crate::fun::Expr;
+pub use crate::imp::*;
+pub use crate::fun::*;
+// it's easier to just export everything right now
 
 use hvm::syntax::File;
 

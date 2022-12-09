@@ -1,4 +1,6 @@
-pub use hvm::syntax::Oper;
+use crate::imp::Id;
+use hvm::Term as Term;
+pub use hvm::syntax::{Oper, Rule}; // use hvm's native rule struct.
 
 pub type Id = String;
 
@@ -33,4 +35,8 @@ pub struct Rule {
 pub struct CaseExpr {
   pub matched: Box<Expr>,
   pub body: Box<Expr>,
+}
+        
+pub fn fun_to_hvm(functional: Fun) -> Term {
+  todo!()
 }
