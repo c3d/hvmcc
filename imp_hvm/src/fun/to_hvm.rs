@@ -1,4 +1,4 @@
-use crate::fun;
+use crate::fun::syntax as fun;
 use hvm::language::syntax as hvm;
 use std::collections::HashSet;
 
