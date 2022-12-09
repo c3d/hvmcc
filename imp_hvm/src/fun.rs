@@ -1,6 +1,4 @@
-use crate::imp::Id;
-use hvm::Term as Term;
-pub use hvm::syntax::{Oper, Rule}; // use hvm's native rule struct.
+pub use hvm::syntax::{Oper}; // use hvm's native rule struct.
 
 pub type Id = String;
 
@@ -13,7 +11,7 @@ pub enum Expr {
   App { expr: Box<Expr>, argm: Box<Expr> },
   Var { name: Id },
   Unsigned { numb: u64 },
-  Float { numb: u64 }, 
+  Float { numb: u64 },
   BinOp { op: Oper, left: Box<Expr>, right: Box<Expr> },
   Lambda { var: Id, body: Box<Expr> },
   MatchExpr { scrutinee: Box<Expr>, cases: Vec<CaseExpr> },
@@ -35,8 +33,4 @@ pub struct Rule {
 pub struct CaseExpr {
   pub matched: Box<Expr>,
   pub body: Box<Expr>,
-}
-        
-pub fn fun_to_hvm(functional: Expr) -> Term {
-  todo!()
 }

@@ -1,5 +1,5 @@
-pub mod imp;
 pub mod fun;
+pub mod imp;
 pub mod to_hvm;
 
 pub use crate::imp::*;
