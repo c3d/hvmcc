@@ -70,7 +70,3 @@ pub struct Procedure {
 }
 
 pub type Program = Vec<Procedure>;
-
-pub fn imp_to_fun(imperative: Imp) -> Expr {
-  todo!()
-}

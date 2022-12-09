@@ -1,4 +1,4 @@
-pub use hvm::syntax::{Oper}; // use hvm's native rule struct.
+pub use hvm::syntax::Oper; // use hvm's native rule struct.
 
 pub type Id = String;
 
