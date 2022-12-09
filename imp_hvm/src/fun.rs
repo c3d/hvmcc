@@ -37,6 +37,6 @@ pub struct CaseExpr {
   pub body: Box<Expr>,
 }
         
-pub fn fun_to_hvm(functional: Fun) -> Term {
+pub fn fun_to_hvm(functional: Expr) -> Term {
   todo!()
 }
