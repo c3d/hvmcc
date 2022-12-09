@@ -58,8 +58,8 @@ pub enum Imp {
 
 #[derive(Clone, Debug)]
 pub struct CaseStmt {
-  matched: Expr,
-  body: Imp,
+  pub matched: Expr,
+  pub body: Imp,
 }
 
 #[derive(Clone, Debug)]
