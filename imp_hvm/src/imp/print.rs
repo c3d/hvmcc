@@ -1,4 +1,4 @@
-use crate::{Imp, CaseStmt};
+use crate::{Imp, CaseStmt, Procedure, Program};
 
 // Display trait
 
@@ -34,5 +34,20 @@ impl std::fmt::Display for Imp {
       Imp::Break => write!(f, "break;"),
       Imp::Pass => write!(f, "pass;"),
     }
+  }
+}
+
+impl std::fmt::Display for Procedure {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let Procedure {name, args, body} = self;
+    let args = args.join(", ");
+    write!(f, "{}({}) {{ {} }}", name, args, body)
+  }
+}
+
+impl std::fmt::Display for Program {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    let procs: Vec<String> = self.0.iter().map(|x| format!("{}", x)).collect();
+    write!(f, "{}", procs.join("\n"))
   }
 }

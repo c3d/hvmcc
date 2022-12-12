@@ -64,9 +64,9 @@ pub struct CaseStmt {
 
 #[derive(Clone, Debug)]
 pub struct Procedure {
-  name: Id,
-  args: Vec<Id>,
-  body: Imp,
+  pub name: Id,
+  pub args: Vec<Id>,
+  pub body: Imp,
 }
 
-pub type Program = Vec<Procedure>;
+pub struct Program(pub Vec<Procedure>);
