@@ -1,30 +1,63 @@
 use crate::{Expr, CaseExpr};
+use crate::imp::print::ind;
 
-
-// Display trait.
-// Debugging purposes
+pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
+  fn display_args(args: &[Expr]) -> String {
+    args.iter().map(|x| format!(" {}", x)).collect::<Vec<String>>().join("")
+  }
+  match fun {
+    Expr::Unit => ind("Unit", depth),
+    Expr::Ctr { name, args } => {
+      let lpar = ind("(", depth);
+      let rpar = ")";
+      let args = display_args(args);
+      format!("{lpar}{name}{args}{rpar}")
+    },
+    Expr::FunCall { name, args } => {
+      let lpar = ind("(", depth);
+      let rpar = ")";
+      let args = display_args(args);
+      format!("{lpar}{name}{args}{rpar}")
+    },
+    Expr::Let { name, expr, body } => {
+      let ilet = ind("let", depth);
+      let body = pprint_fun(body, depth);
+      format!("{ilet} {name} = {expr};\n{body}")
+    },
+    Expr::App { expr, argm } => {
+      let lpar = ind("(", depth);
+      let rpar = ")";
+      format!("{lpar}!{expr} {argm}{rpar}")
+    },
+    Expr::Var { name } => ind(name, depth),
+    Expr::Unsigned { numb } => ind(&hvm::u60::show(*numb), depth),
+    Expr::Float { numb } => ind(&hvm::f60::show(hvm::f60::new(*numb)), depth),
+    Expr::BinOp { op, left, right } => {
+      let lpar = ind("(", depth);
+      let rpar = ")";
+      format!("{lpar}{op} {left} {right}{rpar}")
+    },
+    Expr::Lambda { var, body } => {
+      let lam = ind("λ", depth);
+      format!("{lam}{var} {body}")
+    },
+    Expr::MatchExpr { scrutinee, cases } => {
+      fn display_case(case: &CaseExpr, depth: usize) -> String {
+        let CaseExpr { matched, body } = case;
+        let matched = pprint_fun(matched, depth);
+        let body = pprint_fun(body, depth+2);
+        format!("{matched} =>\n{body}")
+      }
+      let cases = cases.iter().map(|x| display_case(x, depth+2)).collect::<Vec<String>>().join("\n");
+      let imatch = ind("match", depth);
+      format!("{imatch} {scrutinee} {{\n{}\n{}", cases, ind("}", depth))
+    },
+  }
+}
 
 impl std::fmt::Display for Expr {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    fn display_args(args: &[Expr]) -> String {
-      args.iter().map(|x| format!(" {}", x)).collect::<Vec<String>>().join(" ")
-    }
-    match self {
-      Expr::Unit => write!(f, "Unit"),
-      Expr::Ctr { name, args } => write!(f, "{{{}{}}}", name, display_args(args)),
-      Expr::FunCall { name, args } => write!(f, "({}{})", name, display_args(args)),
-      Expr::Let { name, expr, body } => write!(f, "let {} = {};\n{}", name, expr, body),
-      Expr::App { expr, argm } => write!(f, "(!{} {})", expr, argm),
-      Expr::Var { name } => write!(f, "{}", name),
-      Expr::Unsigned { numb } => write!(f, "{}", *numb),
-      Expr::Float { numb } => write!(f, "{}", *numb),
-      Expr::BinOp { op, left, right } => write!(f, "({} {} {})", op, left, right),
-      Expr::Lambda { var, body } => write!(f, "λ{} {}", var, body),
-      Expr::MatchExpr { scrutinee, cases } => {
-        let cases = cases.iter().map(CaseExpr::to_string).collect::<Vec<String>>().join("\n");
-        write!(f, "match {} {{ {} }}", scrutinee, cases)
-      },
-    }
+    write!(f, "{}", pprint_fun(self, 0))
   }
 }
 
