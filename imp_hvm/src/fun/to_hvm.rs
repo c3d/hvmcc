@@ -1,8 +1,9 @@
 use crate::fun::syntax as fun;
 use hvm::language::syntax as hvm;
+use ::hvm::runtime::data::{f60, u60};
 use std::collections::HashSet;
 
-pub fn compile_function(function: fun::Function) -> Result<hvm::File, ()> {
+pub fn compile_function(function: fun::Function) -> Result<hvm::File, String> {
   let mut rules = Vec::new();
   for rule in function.rules {
     let file = compile_rule(&function.name, rule)?;
@@ -14,9 +15,9 @@ pub fn compile_function(function: fun::Function) -> Result<hvm::File, ()> {
 pub fn compile_rule(
   fn_name: &fun::Id,
   mut rule: fun::Rule,
-) -> Result<hvm::File, ()> {
+) -> Result<hvm::File, String> {
   if !is_valid_lhs(&rule.lhs) {
-    return Err(());
+    return Err(format!("Invalid lhs: {}", &rule.lhs));
   }
   let mut hoisted_fns = Vec::new();
   hoist_matches(rule.rhs.as_mut(), fn_name, &mut hoisted_fns);
@@ -32,7 +33,7 @@ pub fn compile_rule(
   Ok(hvm::File { rules, smaps: Vec::new() })
 }
 
-pub fn compile_expr(expr: &fun::Expr) -> Result<Box<hvm::Term>, ()> {
+pub fn compile_expr(expr: &fun::Expr) -> Result<Box<hvm::Term>, String> {
   use ::hvm::Term;
   use fun::Expr;
   let term = match expr {
@@ -62,8 +63,8 @@ pub fn compile_expr(expr: &fun::Expr) -> Result<Box<hvm::Term>, ()> {
       Term::App { func: compile_expr(expr)?, argm: compile_expr(argm)? }
     }
     Expr::Var { name } => Term::Var { name: name.clone() },
-    Expr::Unsigned { numb } => Term::U6O { numb: *numb },
-    Expr::Float { numb } => Term::F6O { numb: *numb },
+    Expr::Unsigned { numb } => Term::U6O { numb: u60::new(*numb) },
+    Expr::Float { numb } => Term::F6O { numb: f60::new(*numb) },
     Expr::BinOp { op, left, right } => Term::Op2 {
       oper: *op,
       val0: compile_expr(left)?,
@@ -145,33 +146,36 @@ pub fn hoist_matches(
       // TODO: Can all match expressions be mapped to HVM's pattern matching?
       // maybe we should check whether it can be hoisted or not
       // Figure out which vars of the context need to be passed
-      let mut ctx = HashSet::new();
+      let mut ctx_names = HashSet::new();
       for case in cases.iter() {
         let pat_vars = get_unbound_vars(&case.matched);
         let body_vars = get_unbound_vars(&case.body);
         let diff: HashSet<String> =
           body_vars.difference(&pat_vars).map(String::clone).collect();
-        ctx.extend(diff);
+          ctx_names.extend(diff);
       }
-      let ctx = ctx.iter().map(|x| Expr::Var { name: x.clone() });
+      let ctx_vars = ctx_names.iter().map(|x| Expr::Var { name: x.clone() });
       // Create the hoisted function
       let aux_name = format!("{}.{}", fn_name, hoisted.len());
-      let num_args = ctx.len() + 1; // TODO: check if num_args > 16
+      let num_args = ctx_vars.len() + 1; // TODO: check if num_args > 16
       let mut rules = Vec::with_capacity(cases.len());
       for case in cases {
         let mut pats = Vec::with_capacity(num_args);
         pats.push(*case.matched.clone());
-        pats.extend(ctx.clone());
+        pats.extend(ctx_vars.clone());
         let lhs = Box::new(Expr::Ctr { name: aux_name.clone(), args: pats });
         let rhs = case.body.clone();
         rules.push(fun::Rule { lhs, rhs });
       }
-      let new_fn = fun::Function { name: fn_name.clone(), rules };
+      let mut args = Vec::with_capacity(num_args);
+      args.push("matched".to_string());
+      args.extend(ctx_names.clone());
+      let new_fn = fun::Function { name: fn_name.clone(), args, rules };
       hoisted.push(new_fn);
       // Replace the expression with a function call
       let mut args = Vec::with_capacity(num_args);
       args.push(*scrutinee.clone());
-      args.extend(ctx);
+      args.extend(ctx_vars);
       *expr = Expr::FunCall { name: aux_name, args };
     }
   }

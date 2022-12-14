@@ -1,3 +1,4 @@
+#[macro_use] extern crate lalrpop_util;
 pub mod fun;
 pub mod imp;
 
