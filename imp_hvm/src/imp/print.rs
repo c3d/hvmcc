@@ -22,7 +22,6 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
     },
     Imp::Assignment { name, expr } => {
       let name = ind(name, depth);
-      let expr = pprint_fun(expr, depth);
       format!("{name} = {expr};")
     },
     Imp::Expression { expr } => {
