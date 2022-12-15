@@ -6,7 +6,7 @@ use pretty_assertions::assert_eq;
 use walkdir::WalkDir;
 
 use imp_hvm::fun::to_hvm::compile_function;
-use imp_hvm::fun::fun_parser::FunctionParser;
+use imp_hvm::parser::FunctionParser;
 
 fn golden_test(path: &Path, run: &dyn Fn(&Path) -> String) {
     let result = run(path);

@@ -1,6 +1,7 @@
 #[macro_use] extern crate lalrpop_util;
 pub mod fun;
 pub mod imp;
+lalrpop_mod!(pub parser, "parser.rs");
 
 pub use crate::imp::*;
 pub use crate::fun::*;
