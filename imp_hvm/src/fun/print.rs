@@ -8,8 +8,8 @@ pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
   match fun {
     Expr::Unit => ind("Unit", depth),
     Expr::Ctr { name, args } => {
-      let lpar = ind("(", depth);
-      let rpar = ")";
+      let lpar = ind("{", depth);
+      let rpar = "}";
       let args = display_args(args);
       format!("{lpar}{name}{args}{rpar}")
     },
@@ -58,12 +58,5 @@ pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
 impl std::fmt::Display for Expr {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}", pprint_fun(self, 0))
-  }
-}
-
-impl std::fmt::Display for CaseExpr {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let CaseExpr { matched, body } = self;
-    write!(f, "{} => {}", matched, body)
   }
 }
