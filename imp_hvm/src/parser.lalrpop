@@ -3,50 +3,52 @@ use crate::imp::syntax::{CaseStmt, Imp, Procedure, Program};
 
 grammar;
 
-Program: Program =
-    <Procedure*> =>
-        Program(<>);
 
-Procedure: Procedure =
-    "procedure" <name:Id> "(" <args:Id*> ")" "{" <body:Imp> "}" =>
-        Procedure{<>};
+// Program: Program =
+//     <Procedure*> =>
+//         Program(<>);
 
-pub Imp: Imp = {
-    <stmt1:Imp> <stmt2:Imp> =>
-        Imp::Sequence{stmt1: Box::new(stmt1), stmt2: Box::new(stmt2)},
-    <name:Id> "=" <expr:Expr> ";" =>
-        Imp::Assignment{<>},
-    <expr: Expr> ";" =>
-        Imp::Expression{<>},
-    "match" <expr:Expr> "{" <cases:CaseStmt*> "}" => {
-        // TODO: Check if the last case is default
-        Imp::MatchStmt { expr, cases, default: todo!() }
-    },
-    "if" <condition:Expr> "{" <true_case:Imp> "}" "else" "{" <false_case:Imp> "}" =>
-        Imp::IfElse { condition, true_case: Box::new(true_case), false_case: Box::new(false_case) },
-    "for" "(" <initialize:Imp> ";" <condition:Expr> ";" <afterthought:Imp> ")" "{" <body:Imp> "}" "else" "{" <else_case:Imp> "}" =>
-        Imp::ForElse { initialize: Box::new(initialize), condition, afterthought: Box::new(afterthought), body: Box::new(body), else_case: Box::new(else_case) },
-    "for" <target:Id> "in" <iterator:Expr> "{" <body:Imp> "}" "else" "{" <else_case:Imp> "}" =>
-        Imp::ForInElse { target, iterator, body: Box::new(body), else_case: Box::new(else_case) },
-    "while" <condition:Expr> "{" <body:Imp> "}" "else" "{" <else_case:Imp> "}" =>
-        Imp::WhileElse { condition, body: Box::new(body), else_case: Box::new(else_case) },
-    <name:Id> ":" <stmt:Imp> =>
-        Imp::Label { name, stmt: Box::new(stmt) },
-    "return" <value:Expr> ";" =>
-        Imp::Return{<>},
-    "goto" <name:Id> ";" =>
-        Imp::Goto{<>},
-    "continue" ";" =>
-        Imp::Continue,
-    "break" ";" =>
-        Imp::Break,
-    "pass" ";" =>
-        Imp::Pass,
-};
+// Procedure: Procedure =
+//     "procedure" <name:Id> "(" <args:Id*> ")" "{" <body:Imp> "}" =>
+//         Procedure{<>};
 
-CaseStmt: CaseStmt =
-    <matched:Expr> "=>" "{" <body:Imp> "}" =>
-        CaseStmt{<>};
+// pub Imp: Imp = {
+//     <stmt1:Imp> <stmt2:Imp> =>
+//         Imp::Sequence{stmt1: Box::new(stmt1), stmt2: Box::new(stmt2)},
+//     <name:Id> "=" <expr:Expr> ";" =>
+//         Imp::Assignment{<>},
+//     <expr: Expr> ";" =>
+//         Imp::Expression{<>},
+//     "match" <expr:Expr> "{" <cases:CaseStmt*> "}" => {
+//         // TODO: Check if the last case is default
+//         Imp::MatchStmt { expr, cases, default: todo!() }
+//     },
+//     "if" <condition:Expr> "{" <true_case:Imp> "}" "else" "{" <false_case:Imp> "}" =>
+//         Imp::IfElse { condition, true_case: Box::new(true_case), false_case: Box::new(false_case) },
+//     "for" "(" <initialize:Imp> ";" <condition:Expr> ";" <afterthought:Imp> ")" "{" <body:Imp> "}" "else" "{" <else_case:Imp> "}" =>
+//         Imp::ForElse { initialize: Box::new(initialize), condition, afterthought: Box::new(afterthought), body: Box::new(body), else_case: Box::new(else_case) },
+//     "for" <target:Id> "in" <iterator:Expr> "{" <body:Imp> "}" "else" "{" <else_case:Imp> "}" =>
+//         Imp::ForInElse { target, iterator, body: Box::new(body), else_case: Box::new(else_case) },
+//     "while" <condition:Expr> "{" <body:Imp> "}" "else" "{" <else_case:Imp> "}" =>
+//         Imp::WhileElse { condition, body: Box::new(body), else_case: Box::new(else_case) },
+//     <name:Id> ":" <stmt:Imp> =>
+//         Imp::Label { name, stmt: Box::new(stmt) },
+//     "return" <value:Expr> ";" =>
+//         Imp::Return{<>},
+//     "goto" <name:Id> ";" =>
+//         Imp::Goto{<>},
+//     "continue" ";" =>
+//         Imp::Continue,
+//     "break" ";" =>
+//         Imp::Break,
+//     "pass" ";" =>
+//         Imp::Pass,
+// };
+
+// CaseStmt: CaseStmt =
+//     <matched:Expr> "=>" "{" <body:Imp> "}" =>
+//         CaseStmt{<>};
+
 
 pub Function: Function =
     "function" <name:Id> "(" <args:Id*> ")" "{" <rules:Rule+> "}" =>
