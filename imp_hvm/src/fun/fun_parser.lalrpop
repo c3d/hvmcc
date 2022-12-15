@@ -3,17 +3,17 @@ use crate::fun::syntax::{CaseExpr, Expr, Function, Id, Rule, Oper};
 grammar;
 
 pub Function: Function = {
-    <name: Id> "(" <args: (Id*)> ")" "{" <rules: (Rule+)> "}" => Function{<>},
+    "function" <name:Id> "(" <args:Id*> ")" "{" <rules:Rule+> "}" => Function{<>},
 };
 
 pub Rule: Rule = {
-    <lhs: Expr> "=" <rhs: Expr> => Rule{ lhs: Box::new(lhs), rhs: Box::new(rhs) },
+    <lhs:Expr> "=" <rhs:Expr> => Rule{ lhs: Box::new(lhs), rhs: Box::new(rhs) },
 };
 
 pub Expr: Expr = {
     "Unit" => Expr::Unit,
-    "{" <name:Id> <args:(Expr*)> "}" => Expr::Ctr{ name, args: Vec::from(args) },
-    "(" <name:Id> <args:(Expr*)> ")" => Expr::FunCall{<>},
+    "{" <name:Id> <args:Expr*> "}" => Expr::Ctr{<>},
+    "(" <name:Id> <args:Expr*> ")" => Expr::FunCall{<>},
     "let" <name:Id> "=" <expr:Expr> ";" <body:Expr> => Expr::Let{ name, expr: Box::new(expr), body: Box::new(body) },
     "(!" <expr:Expr> <argm:Expr> ")" => Expr::App{ expr: Box::new(expr), argm: Box::new(argm) },
     "(" <op:Oper> <left:Expr> <right:Expr> ")" => Expr::BinOp{ op, left: Box::new(left), right: Box::new(right) },
@@ -24,7 +24,7 @@ pub Expr: Expr = {
 };
 
 pub Num: Expr = {
-    <hex: r"0x([0-9]|[a-f]|[A-F])+"> => Expr::Unsigned{ numb: u64::from_str_radix(&hex[2..], 16).unwrap() },
+    <hex: r"0x[0-9a-fA-F]+"> => Expr::Unsigned{ numb: u64::from_str_radix(&hex[2..], 16).unwrap() },
     <dec: r"[0-9]+"> => Expr::Unsigned{ numb: dec.parse::<u64>().unwrap() },
     <point: r"[0-9]+\.[0-9]*"> => Expr::Float{ numb: point.parse::<f64>().unwrap() },
 };
@@ -51,5 +51,4 @@ pub Oper: Oper = {
 pub CaseExpr: CaseExpr =
     <matched: Expr> "=>" <body: Expr> => CaseExpr{ matched: Box::new(matched), body: Box::new(body) };
 
-pub Id: Id =
-    <s: r"[a-zA-Z_\.][a-zA-Z_\.0-9]*"> => s.to_string();
+pub Id: Id = r"[a-zA-Z_.][a-zA-Z_.0-9]*" => String::from(<>);
