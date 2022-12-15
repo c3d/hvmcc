@@ -33,8 +33,8 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
       fn display_case(case: &CaseStmt, depth: usize) -> String {
         let CaseStmt { matched, body } = case;
         let matched = pprint_fun(matched, depth);
-        let body = pprint_imp(body, depth+2);
-        format!("{matched} =>\n{body}",)
+        let b_block = indent_block(body, depth);
+        format!("{matched} => {b_block}",)
       }
       let cases = cases.iter().map(|x| display_case(x, depth+2)).collect::<Vec<String>>().join("\n");
       let imatch = ind("match", depth);
@@ -93,7 +93,7 @@ impl std::fmt::Display for Procedure {
     let Procedure {name, args, body} = self;
     let body_block = indent_block(body, 0);
     let args = args.join(", ");
-    write!(f, "{name}({args}) {body_block}")
+    write!(f, "procedure {name} ({args}) {body_block}")
   }
 }
 
