@@ -1,0 +1,8 @@
+function test_nums () {
+    {test_nums} =
+        let a = 0053246262234;
+        let b = 0xffff;
+        let c = 0.2356564;
+        let d = 34689798134.7676454657254;
+        {Pair (+ a b) (+ c d)}
+}

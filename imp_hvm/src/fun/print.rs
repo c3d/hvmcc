@@ -1,5 +1,6 @@
-use crate::{Expr, CaseExpr};
+use crate::{Expr, CaseExpr, Function, Rule};
 use crate::imp::print::ind;
+use std::fmt;
 
 pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
   fn display_args(args: &[Expr]) -> String {
@@ -42,12 +43,6 @@ pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
       format!("{lam}{var} {body}")
     },
     Expr::MatchExpr { scrutinee, cases } => {
-      fn display_case(case: &CaseExpr, depth: usize) -> String {
-        let CaseExpr { matched, body } = case;
-        let matched = pprint_fun(matched, depth);
-        let body = pprint_fun(body, depth+2);
-        format!("{matched} =>\n{body}")
-      }
       let cases = cases.iter().map(|x| display_case(x, depth+2)).collect::<Vec<String>>().join("\n");
       let imatch = ind("match", depth);
       format!("{imatch} {scrutinee} {{\n{}\n{}", cases, ind("}", depth))
@@ -55,8 +50,29 @@ pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
   }
 }
 
+fn display_case(case: &CaseExpr, depth: usize) -> String {
+  let CaseExpr { matched, body } = case;
+  let matched = pprint_fun(matched, depth);
+  let body = pprint_fun(body, depth+2);
+  format!("{matched} =>\n{body}")
+}
+
 impl std::fmt::Display for Expr {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}", pprint_fun(self, 0))
+  }
+}
+
+impl fmt::Display for Rule {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "{} = {}", self.lhs, self.rhs)
+  }
+}
+
+impl fmt::Display for Function {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let args = self.args.join("\n");
+    let rules = self.rules.iter().map(Rule::to_string).collect::<Vec<String>>().join("\n");
+    write!(f, "function {} ({}) {{\n{}\n}}", self.name, args, rules)
   }
 }

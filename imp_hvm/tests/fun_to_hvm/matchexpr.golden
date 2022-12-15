@@ -1,0 +1,4 @@
+(test_match a) = (test_match.0 a)
+(test_match.0 (SomeCtr)) = (Unit)
+(test_match.0 0) = 1
+(test_match.0 a) = a

@@ -1,0 +1,3 @@
+(test_BigRules 0 a (Ctr1 (Ctr2 (Ctr3 x y (Ctr0)) (Ctr1 b)))) = (Ctr4 a b x y)
+(test_BigRules 1 a b) = (Ctr2 a b)
+(test_BigRules n (Ctr10 (Ctr0) (Ctr0) (Ctr0) (Ctr0) (Ctr0) (Ctr0) (Ctr0) (Ctr0) (Ctr0) (Ctr2 o i)) c) = c

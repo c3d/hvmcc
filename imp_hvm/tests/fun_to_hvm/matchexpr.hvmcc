@@ -1,0 +1,7 @@
+function test_match (a) {
+    {test_match a} = match a {
+        {SomeCtr} => Unit
+        0 => 1
+        a => a
+    }
+}

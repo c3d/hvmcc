@@ -1,0 +1,3 @@
+function Id (x) {
+    {Id x} = x
+}
