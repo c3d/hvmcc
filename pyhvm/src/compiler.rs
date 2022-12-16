@@ -43,21 +43,23 @@ impl Compile<Program> for Mod {
   }
 }
 
+
+
 impl Compile<Imp> for StmtKind {
   fn compile(&self) -> PyResult<Imp> {
     /// Compiles a possibly multi-expression target into
     /// a string. Right now, only single variable targets are supported.
     fn compile_target(target: &Vec<Located<ExprKind>>) -> PyResult<String> {
-          // if vec has only 1 element, with only 1 variable
-          // we can convert it into assert
-          if let [Located{ location:_, node: ExprKind::Name { id, ctx: _ }, end_location: _, custom: _ }] = target.as_slice() {
-            Ok(id.clone())
-          }
-          // otherwise, not supported.
-          else {
-            not_supported("Multiple targets are not supported yet.")
-          }
-        }
+      // if vec has only 1 element, with only 1 variable
+      // we can convert it into assert
+      if let [Located{ location:_, node: ExprKind::Name { id, ctx: _ }, end_location: _, custom: _ }] = target.as_slice() {
+        Ok(id.clone())
+      }
+      // otherwise, not supported.
+      else {
+        not_supported("Multiple targets are not supported yet.")
+      }
+    }
     
     match self {
       // SUPPORTED STATEMENTS:
@@ -77,14 +79,14 @@ impl Compile<Imp> for StmtKind {
       StmtKind::For { target, iter, body, orelse, type_comment } => {
         let target = compile_target(&vec![*target.clone()])?;
         let iterator = iter.compile()?;
-        let body = Box::new(body.compile()?);
-        let else_case = Box::new(orelse.compile()?);
+        let body = body.compile()?;
+        let else_case = orelse.compile()?;
         Ok(Imp::ForInElse { target, iterator, body, else_case })
       },
       StmtKind::While { test, body, orelse } => {
         let condition = test.compile()?;
-        let body = Box::new(body.compile()?);
-        let else_case = Box::new(orelse.compile()?);
+        let body = body.compile()?;
+        let else_case = orelse.compile()?;
         Ok(Imp::WhileElse { condition, body, else_case }) 
       },
       StmtKind::Expr { value } => {
@@ -93,8 +95,8 @@ impl Compile<Imp> for StmtKind {
       },
       StmtKind::If { test, body, orelse } => {
         let condition = test.compile()?;
-        let true_case = Box::new(body.compile()?);
-        let false_case = Box::new(orelse.compile()?);
+        let true_case = body.compile()?;
+        let false_case = orelse.compile()?;
         Ok(Imp::IfElse { condition, true_case, false_case })
       },
       StmtKind::Pass => Ok(Imp::Pass),
@@ -103,7 +105,14 @@ impl Compile<Imp> for StmtKind {
       // to implement match we still need rustpython's parser support
       // i need to look into it a bit later.
       StmtKind::Match { subject, cases } => todo!(),
-      StmtKind::AugAssign { target, op, value } => not_supported("Augmented assignment is not supported yet."),
+      StmtKind::AugAssign { target, op, value } => {
+        let name = compile_target(&vec![*target.clone()])?; // ugly
+        let left = Box::new(Exp::Var { name: name.clone() });
+        let op   = op.compile()?;
+        let right = Box::new(value.compile()?);
+        let expr = Exp::BinOp { op, left, right };
+        Ok(Imp::Assignment { name, expr })
+      },
       StmtKind::Assert { test, msg } => not_supported("Assert statement is not supported yet."),
       // NOT SUPPORTED:
       StmtKind::AsyncFunctionDef { name, args, body, decorator_list, returns, type_comment } => not_supported("Async functions are not suported."),
@@ -149,23 +158,15 @@ impl Compile<Procedure> for StmtKind {
   }
 }
 
-impl Compile<Imp> for Vec<Stmt> {
-  fn compile(&self) -> PyResult<Imp> {
+impl Compile<Vec<Imp>> for Vec<Stmt> {
+  fn compile(&self) -> PyResult<Vec<Imp>> {
     // this is kinda scuffed, i think it can be refactored into simpler code
     // but i wont try to do it right now.
-    match self.as_slice() {
-      [] => Ok(Imp::Pass),
-      [stmt] => stmt.compile(),
-      [head, tail @ ..] => {
-        let fst_stmt: PyResult<Imp> = head.compile();
-        tail.iter().fold(fst_stmt, |imp, stmt| {
-          let stmt: PyResult<Imp> = stmt.compile();
-          match stmt {
-            Ok(stmt2) => imp.map(|stmt1| Imp::Sequence { stmt1: Box::new(stmt1), stmt2: Box::new(stmt2) }),
-            Err(err) => Err(err)
-          }
-        })
-      }
+    if self.len() == 0 {
+      Ok(vec![Imp::Pass])
+    }
+    else {
+      self.iter().map(|x| x.compile()).collect()
     }
   }
 }

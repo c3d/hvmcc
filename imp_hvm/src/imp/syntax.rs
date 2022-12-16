@@ -20,9 +20,9 @@ pub enum Imp {
     false_case: StmtBlock,
   },
   ForElse {
-    initialize: StmtBlock,
+    initialize: Box<Imp>,
     condition: Expr,
-    afterthought: StmtBlock,
+    afterthought: Box<Imp>,
     body: StmtBlock,
     else_case: StmtBlock,
   },

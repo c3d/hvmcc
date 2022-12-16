@@ -62,8 +62,6 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
     Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
       let ifor = ind("for", depth);
       // TODO: breaks indentation if there's a block expression in the for
-      let initialize = vec_to_string(initialize, &|x| pprint_imp(x, 0), " ");
-      let afterthought = vec_to_string(afterthought, &|x| pprint_imp(x, 0), " ");
       let blocks = pprint_begin_else(body, else_case, depth);
       format!("{ifor} ({initialize}, {condition}, {afterthought}) {blocks}")
     },
