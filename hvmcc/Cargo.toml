@@ -8,6 +8,6 @@ edition = "2021"
 [dependencies]
 imp_hvm = { path = "../imp_hvm" }
 js_imp =  { path = "../js_imp" }
-py_imp =  { path = "../py_imp" }
+pyhvm =  { path = "../pyhvm" }
 
 clap = "4.0.29"
