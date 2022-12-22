@@ -15,15 +15,15 @@ Procedure: Procedure =
 pub Imp: Imp = {
     <name:Id> ":" <stmt:Imp> =>
         Imp::Label { name, stmt: Box::new(stmt) },
-    "match" <expr:Expr> "begin" <cases:CaseStmt*> "else" <default:Imp+> "end" =>
+    "match" <expr:Expr> <cases:CaseStmt*> "else" <default:Imp+> "end" =>
         Imp::MatchStmt {<>},
-    "if" <condition:Expr> "begin" <true_case:Imp+> "else" <false_case:Imp+> "end" =>
+    "if" <condition:Expr> <true_case:Imp+> "else" <false_case:Imp+> "end" =>
         Imp::IfElse{<>},
-    "for" "(" <initialize:Imp> "," <condition:Expr> "," <afterthought:Imp> ")" "begin" <body:Imp+> "else" <else_case:Imp+> "end" =>
+    "for" "(" <initialize:Imp> "," <condition:Expr> "," <afterthought:Imp> ")" <body:Imp+> "else" <else_case:Imp+> "end" =>
         Imp::ForElse{ initialize: Box::new(initialize), condition, afterthought: Box::new(afterthought), body, else_case },
-    "for" <target:Id> "in" <iterator:Expr> "begin" <body:Imp+> "else" <else_case:Imp+> "end" =>
+    "for" <target:Id> "in" <iterator:Expr> <body:Imp+> "else" <else_case:Imp+> "end" =>
         Imp::ForInElse{<>},
-    "while" <condition:Expr> "begin" <body:Imp+> "else" <else_case:Imp+> "end" =>
+    "while" <condition:Expr> <body:Imp+> "else" <else_case:Imp+> "end" =>
         Imp::WhileElse{<>},
     <name:Id> "=" <expr:Expr> ";" =>
         Imp::Assignment{<>},

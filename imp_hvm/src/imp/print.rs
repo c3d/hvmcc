@@ -22,14 +22,14 @@ fn pprint_begin_else(body: &StmtBlock, else_case: &StmtBlock, depth: usize) -> S
   let i_else = ind("else", depth);
   let else_case = pprint_stmt_block(else_case, depth+2);
   let i_end = ind("end", depth);
-  format!("begin\n{body}\n{i_else}\n{else_case}\n{i_end}")
+  format!("\n{body}\n{i_else}\n{else_case}\n{i_end}")
 }
 
 // Same as pprint_begin_else but without the else clause (`begin stmts; end`)
-fn pprint_begin_end(body: &StmtBlock, depth: usize) -> String {
+fn pprint_block_end(body: &StmtBlock, depth: usize) -> String {
   let body = pprint_stmt_block(body, depth+2);
   let i_end = ind("end", depth);
-  format!("begin\n{body}\n{i_end}")
+  format!("\n{body}\n{i_end}")
 }
 
 fn pprint_imp(imp: &Imp, depth: usize) -> String {
@@ -46,13 +46,13 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
       fn display_case(case: &CaseStmt, depth: usize) -> String {
         let CaseStmt { matched, body } = case;
         let matched = pprint_fun(matched, depth);
-        let b_block = pprint_begin_end(body, depth);
+        let b_block = pprint_block_end(body, depth);
         format!("{matched} => {b_block}",)
       }
       let cases = vec_to_string(cases, &|x| display_case(x, depth+2), "\n");
       let imatch = ind("match", depth);
       let dflt_block = pprint_stmt_block(default, depth+2);
-      format!("{imatch} {expr} begin\n{cases}\nelse\n{dflt_block}\nend")
+      format!("{imatch} {expr} \n{cases}\nelse\n{dflt_block}\nend")
     },
     Imp::IfElse { condition, true_case, false_case } => {
       let iif = ind("if", depth);
@@ -94,7 +94,7 @@ impl std::fmt::Display for Procedure {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     let Procedure {name, args, body} = self;
     let args = args.join(", ");
-    let body_block = pprint_begin_end(body, 2);
+    let body_block = pprint_block_end(body, 0);
     write!(f, "procedure {name} ({args}) {body_block}")
   }
 }
