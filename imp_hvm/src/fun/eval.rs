@@ -27,8 +27,9 @@ impl Env {
   }
 }
 
-/// Returns Some if it the args match with the lhs and None if it does not
-/// if it does, it returns a vector of names that binds with values
+/// If the term matches the lhs of the rule,
+/// return the vars in the pattern and the expressions they bind to.
+/// Otherwise return none.
 fn matches(term: &Expr, lhs: &Expr) -> Option<Vec<(String, Expr)>> {
   match (lhs, term) {
     (Expr::Ctr {name: lhs_name, args: lhs_args}, Expr::Ctr {name: term_name, args: term_args}) => {
@@ -154,8 +155,8 @@ pub fn eval(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
     Expr::BinOp { op, left, right } => {
       let left  = eval(left, env)?;
       let right = eval(right, env)?;
-      let new = |x: u64| x & 0xFFF_FFFF_FFFF_FFFF;
-      if let (&Expr::Unsigned {numb:a}, &Expr::Unsigned { numb: b }) = (&left, &right) {
+      if let (&Expr::Unsigned { numb: a }, &Expr::Unsigned { numb: b }) = (&left, &right) {
+        let new = |x: u64| x & 0xFFF_FFFF_FFFF_FFFF;
         let numb = match op {
           Oper::Add => Ok(new(a + b)),
           Oper::Sub => Ok(if a >= b { a - b } else { 0x1000000000000000 - (b - a) }) ,
@@ -180,6 +181,41 @@ pub fn eval(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
           Oper::Gte => Ok(if a >  b { 1 } else { 0 }),
           Oper::Gtn => Ok(if a >= b { 1 } else { 0 }),
           Oper::Neq => Ok(if a != b { 1 } else { 0 }),
+        }?;
+        Ok(Expr::Unsigned { numb })
+      } else if let (&Expr::Float { numb: a }, &Expr::Float { numb: b }) = (&left, &right) {
+        let new = |a: f64| {
+          let b = a.to_bits();
+          if b & 0b1111 > 8 {
+            return (b >> 4) + 1;
+          } else {
+            return b >> 4;
+          }
+        };
+        let numb = match op {
+          Oper::Add => Ok(new(a + b)),
+          Oper::Sub => Ok(new(a - b)) ,
+          Oper::Mul => Ok(new(a * b)),
+          Oper::Div => {
+            if b == 0.0 {
+              Err(EvaluationError::DivisionBy0)
+            }
+            else {
+              Ok(new(a / b))
+            }
+          },
+          Oper::Mod => Ok(new(a % b)),
+          Oper::And => Ok(new(f64::cos(a) + f64::sin(b))),
+          Oper::Or  => Ok(new(f64::atan2(a, b))),
+          Oper::Xor => Ok(new(a.ceil() + a.floor())),
+          Oper::Shl => Ok(new(b.powf(a))),
+          Oper::Shr => Ok(new(a.log(b))),
+          Oper::Lte => Ok(new(if a <  b { 1.0 } else { 0.0 })),
+          Oper::Ltn => Ok(new(if a <= b { 1.0 } else { 0.0 })),
+          Oper::Eql => Ok(new(if a == b { 1.0 } else { 0.0 })),
+          Oper::Gte => Ok(new(if a >  b { 1.0 } else { 0.0 })),
+          Oper::Gtn => Ok(new(if a >= b { 1.0 } else { 0.0 })),
+          Oper::Neq => Ok(new(if a != b { 1.0 } else { 0.0 })),
         }?;
         Ok(Expr::Unsigned { numb })
       }
