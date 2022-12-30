@@ -1,0 +1,17 @@
+function Add (a b) {
+  {Add {Z}   y} = y
+  {Add {S x} y} = {S (Add x y)}
+}
+
+function Mul (a b) {
+  {Mul {Z}   y} = {Z}
+  {Mul {S x} y} = (Add y (Mul x y))
+}
+
+function Main () {
+  {Main} =
+    let two = {S {S {Z}}};
+    let three = {S two};
+    let six = (Mul two three);
+    (Add six three)
+}

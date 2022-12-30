@@ -35,3 +35,5 @@ pub struct CaseExpr {
   pub matched: Box<Expr>,
   pub body: Box<Expr>,
 }
+
+pub struct FuncProgram(pub Vec<Function>);

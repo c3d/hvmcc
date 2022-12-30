@@ -6,7 +6,7 @@ use pretty_assertions::assert_eq;
 use walkdir::WalkDir;
 
 use imp_hvm::fun::to_hvm::compile_function;
-use imp_hvm::parser::FunctionParser;
+use imp_hvm::parser::{FunctionParser, FuncProgramParser};
 
 fn golden_test(path: &Path, run: &dyn Fn(&Path) -> String) {
     let result = run(path);
@@ -45,4 +45,29 @@ fn test_fun_to_hvm() {
         }
     };
     golden_test_dir(Path::new("./tests/fun_to_hvm"), "hvmcc", &run);
+}
+
+#[test]
+fn test_fun_eval() {
+  use imp_hvm::fun::*;
+  use std::collections::HashMap;
+  let run = |path: &Path| {
+    let entry = fs::read_to_string(path).unwrap();
+    match FuncProgramParser::new().parse(&entry) {
+      Ok(fprog) => {
+        let imp_hvm::FuncProgram(funcs) = fprog;
+        let mut env = eval::Env::new();
+        let rules: HashMap<_, _> = funcs
+          .into_iter()
+          .map(|syntax::Function { name, args, rules }| (name.clone(), syntax::Function {name, args, rules}))
+          .collect();
+        let main = rules.get("Main").unwrap().rules[0].rhs.clone();
+        env.rules = rules;
+        let expr = eval::eval(&main, &mut env).unwrap();
+        expr.to_string()
+      }
+      Err(err) => err.to_string()
+    }
+  };
+  golden_test_dir(Path::new("./tests/fun_eval"), "hvmcc", &run);
 }

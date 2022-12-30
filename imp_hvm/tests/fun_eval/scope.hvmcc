@@ -1,0 +1,10 @@
+function Main () {
+  {Main} =
+    let pair = {Pair 2 3};
+    let _  = match pair {
+      {Pair x y} =>
+        let pair = {Pair 3 4};
+        pair
+    };
+    pair
+}

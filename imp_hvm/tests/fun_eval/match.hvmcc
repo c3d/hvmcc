@@ -1,0 +1,15 @@
+function test_match (a) {
+  {test_match a} = match a {
+    0 => Unit
+    1 => 1
+    a => @x x
+  }
+}
+
+function empty_rule () {
+  {empty_rule} = Unit
+}
+
+function Main () {
+  {Main} = {Test (empty_rule) (test_match 1) (test_match 2)}
+}

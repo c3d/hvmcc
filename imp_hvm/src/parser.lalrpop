@@ -1,4 +1,4 @@
-use crate::fun::syntax::{CaseExpr, Expr, Function, Id, Rule, Oper};
+use crate::fun::syntax::{CaseExpr, Expr, Function, Id, Rule, Oper, FuncProgram};
 use crate::imp::syntax::{CaseStmt, Imp, Procedure, Program};
 
 grammar;
@@ -7,6 +7,10 @@ grammar;
 Program: Program =
     <Procedure*> =>
         Program(<>);
+
+pub FuncProgram: FuncProgram =
+    <Function*> =>
+        FuncProgram(<>);
 
 Procedure: Procedure =
     "procedure" <name:Id> "(" <args:Id*> ")" "begin" <body:Imp+> "end" =>
