@@ -184,40 +184,32 @@ pub fn eval(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
         }?;
         Ok(Expr::Unsigned { numb })
       } else if let (&Expr::Float { numb: a }, &Expr::Float { numb: b }) = (&left, &right) {
-        let new = |a: f64| {
-          let b = a.to_bits();
-          if b & 0b1111 > 8 {
-            return (b >> 4) + 1;
-          } else {
-            return b >> 4;
-          }
-        };
         let numb = match op {
-          Oper::Add => Ok(new(a + b)),
-          Oper::Sub => Ok(new(a - b)) ,
-          Oper::Mul => Ok(new(a * b)),
+          Oper::Add => Ok(a + b),
+          Oper::Sub => Ok(a - b),
+          Oper::Mul => Ok(a * b),
           Oper::Div => {
             if b == 0.0 {
               Err(EvaluationError::DivisionBy0)
             }
             else {
-              Ok(new(a / b))
+              Ok(a / b)
             }
           },
-          Oper::Mod => Ok(new(a % b)),
-          Oper::And => Ok(new(f64::cos(a) + f64::sin(b))),
-          Oper::Or  => Ok(new(f64::atan2(a, b))),
-          Oper::Xor => Ok(new(a.ceil() + a.floor())),
-          Oper::Shl => Ok(new(b.powf(a))),
-          Oper::Shr => Ok(new(a.log(b))),
-          Oper::Lte => Ok(new(if a <  b { 1.0 } else { 0.0 })),
-          Oper::Ltn => Ok(new(if a <= b { 1.0 } else { 0.0 })),
-          Oper::Eql => Ok(new(if a == b { 1.0 } else { 0.0 })),
-          Oper::Gte => Ok(new(if a >  b { 1.0 } else { 0.0 })),
-          Oper::Gtn => Ok(new(if a >= b { 1.0 } else { 0.0 })),
-          Oper::Neq => Ok(new(if a != b { 1.0 } else { 0.0 })),
+          Oper::Mod => Ok(a % b),
+          Oper::And => Ok(f64::cos(a) + f64::sin(b)),
+          Oper::Or  => Ok(f64::atan2(a, b)),
+          Oper::Xor => Ok(a.ceil() + a.floor()),
+          Oper::Shl => Ok(b.powf(a)),
+          Oper::Shr => Ok(a.log(b)),
+          Oper::Lte => Ok(if a <  b { 1.0 } else { 0.0 }),
+          Oper::Ltn => Ok(if a <= b { 1.0 } else { 0.0 }),
+          Oper::Eql => Ok(if a == b { 1.0 } else { 0.0 }),
+          Oper::Gte => Ok(if a >  b { 1.0 } else { 0.0 }),
+          Oper::Gtn => Ok(if a >= b { 1.0 } else { 0.0 }),
+          Oper::Neq => Ok(if a != b { 1.0 } else { 0.0 }),
         }?;
-        Ok(Expr::Unsigned { numb })
+        Ok(Expr::Float { numb })
       }
       else {
         Err(EvaluationError::UnsupportedBinaryOp { left, right })
