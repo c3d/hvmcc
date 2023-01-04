@@ -1,15 +1,27 @@
 #![allow(unused_variables)]
+//use std::collections::HashMap;
+
 use pyo3::prelude::*;
 use pyo3::exceptions::PyException;
-//use pyo3::Python;
+//use pyo3::types::PyCFunction;
 use rustpython_parser::ast::*;
 use imp_hvm::{Imp, Expr as Exp, Program, Procedure, Oper};
 use num_traits::cast::ToPrimitive;
 
 pyo3::create_exception!(compiler, NotSupported, PyException);
+pyo3::create_exception!(compiler, UnboundVar,   PyException);
 
 fn not_supported<A>(msg: &str) -> PyResult<A> {
   Err(NotSupported::new_err(String::from(msg)))
+}
+
+fn args_to_vector(arguments: &Arguments) -> Vec<String> {
+  let mut names = vec![];
+  for loc in &arguments.args {
+    let ArgData { arg, annotation:_, type_comment:_ } = &loc.node;
+    names.push(arg.clone());
+  }
+  names
 }
 
 pub trait Compile<S> {
@@ -64,6 +76,7 @@ impl Compile<Imp> for StmtKind {
     match self {
       // SUPPORTED STATEMENTS:
       StmtKind::FunctionDef { name, args, body, decorator_list, returns, type_comment } => todo!(),
+      // funcdef should become lambda definitions.
       StmtKind::Return { value } => {
         let value = match value {
           Some(value) => value.compile()?,
@@ -137,14 +150,6 @@ impl Compile<Procedure> for StmtKind {
   fn compile(&self) -> PyResult<Procedure> {
     match self {
       StmtKind::FunctionDef { name, args, body, decorator_list, returns, type_comment } => {
-        fn args_to_vector(arguments: &Arguments) -> Vec<String> {
-          let mut names = vec![];
-          for loc in &arguments.args {
-            let ArgData { arg, annotation:_, type_comment:_ } = &loc.node;
-            names.push(arg.clone());
-          }
-          names
-        }
         let name = name.clone();
         let args = args_to_vector(args);
         let body = body.compile()?;
@@ -160,9 +165,7 @@ impl Compile<Procedure> for StmtKind {
 
 impl Compile<Vec<Imp>> for Vec<Stmt> {
   fn compile(&self) -> PyResult<Vec<Imp>> {
-    // this is kinda scuffed, i think it can be refactored into simpler code
-    // but i wont try to do it right now.
-    if self.len() == 0 {
+    if self.is_empty() {
       Ok(vec![Imp::Pass])
     }
     else {
@@ -170,40 +173,6 @@ impl Compile<Vec<Imp>> for Vec<Stmt> {
     }
   }
 }
-
-// impl ToImp<Box<Term>> for PatternKind {
-//   fn to_imp(&self, ctx: &mut Ctx) -> PyResult<Box<Term>> {
-//     match self {
-//       PatternKind::MatchValue { value } => value.to_imp(ctx),
-//       PatternKind::MatchSingleton { value } => value.to_imp(ctx),
-//       PatternKind::MatchSequence { patterns } => todo!(),
-//       PatternKind::MatchMapping { keys, patterns, rest } => todo!(),
-//       PatternKind::MatchClass { cls, patterns, kwd_attrs, kwd_patterns } => todo!(),
-//       PatternKind::MatchStar { name } => {
-//         let name = match name {
-//           Some(name) => name.clone(),
-//           None       => String::from("_")
-//         };
-//         Ok(Box::new(Term::Var { name }))
-//       },
-//       PatternKind::MatchAs { pattern, name } => todo!(),
-//       PatternKind::MatchOr { patterns } => todo!(),
-//     }
-//   }
-// }
-
-// impl ToImp<()> for MatchCase {
-//   fn to_imp(&self, ctx: &mut Ctx) -> PyResult<()> {
-//     let MatchCase { pattern, guard, body } = self;
-//     let target = pattern.to_imp(ctx)?;
-//     let body = body.to_imp(ctx)?;
-//     let lhs = Box::new(Term::Ctr { name: ctx.curr_rule.clone(), args: ctx.vars.values().cloned().collect()});
-//     let rhs = body;
-//     let rule = Rule { lhs, rhs };
-//     ctx.file.rules.push(rule);
-//     Ok(())
-//   }
-// }
 
 impl Compile<Exp> for Constant {
   fn compile(&self) -> PyResult<Exp> {
@@ -213,7 +182,13 @@ impl Compile<Exp> for Constant {
         let numb = if *boolean { 1 } else { 0 };
         Ok(Exp::Unsigned { numb })
       },
-      Constant::Str(_) => todo!(),
+      Constant::Str(string) => {
+        let nil = Exp::Ctr {name: "String.nil".into(), args: vec![]};
+        let string = string
+          .chars()
+          .rfold(nil, |tail, ch| Exp::Ctr {name: "String.cons".into(), args: vec![Exp::Unsigned {numb: ch as u64}, tail]});
+        Ok(string)
+      },
       Constant::Bytes(_) => todo!(),
       Constant::Int(numb) => {
         let numb = match numb.to_u64() {
@@ -223,14 +198,20 @@ impl Compile<Exp> for Constant {
         Ok(Exp::Unsigned { numb })
       },
       Constant::Tuple(tup) => {
+        let name = format!("Tuple{}", tup.len());
         let args = tup.iter().map(|x| x.compile()).collect::<PyResult<Vec<Exp>>>()?;
-        Ok(Exp::Ctr { name: String::from("Tup"), args })
+        Ok(Exp::Ctr { name, args })
       },
       Constant::Float(float) => {
         let numb = *float;
         Ok(Exp::Float { numb })
       },
-      Constant::Complex { real, imag } => todo!(),
+      Constant::Complex { real, imag } => {
+        let real = Exp::Float {numb: *real};
+        let imag = Exp::Float {numb: *imag};
+        let comp = Exp::Ctr {name: "Complex".into(), args: vec![real, imag]};
+        Ok(comp)
+      },
       Constant::Ellipsis => todo!(),
     }
   }
@@ -285,8 +266,6 @@ impl Compile<Oper> for Cmpop {
 impl Compile<Exp> for ExprKind {
   fn compile(&self) -> PyResult<Exp> {
     match self {
-      ExprKind::BoolOp { op, values } => todo!(),
-      ExprKind::NamedExpr { target, value } => todo!(),
       ExprKind::BinOp { left, op, right } => {
         let left  = Box::new(left.compile()?);
         let right = Box::new(right.compile()?);
@@ -305,10 +284,14 @@ impl Compile<Exp> for ExprKind {
           },
         }
       }
-      ExprKind::Lambda { args, body } => todo!(),
-      ExprKind::IfExp { test, body, orelse } => todo!(),
-      ExprKind::Dict { keys, values } => todo!(),
-      ExprKind::Set { elts } => todo!(),
+      ExprKind::Lambda { args, body } => {
+        let names = args_to_vector(args);
+        let body  = body.compile()?;
+        Ok(names
+           .into_iter()
+           .rfold(body, |body, var| Exp::Lambda { var, body: Box::new(body) })
+        )
+      },
       ExprKind::ListComp { elt, generators } => {
         let mut expr = elt.compile()?;
         for gen in generators {
@@ -320,25 +303,15 @@ impl Compile<Exp> for ExprKind {
         }
         Ok(expr)
       },
-      ExprKind::SetComp { elt, generators } => todo!(),
-      ExprKind::DictComp { key, value, generators } => todo!(),
-      ExprKind::GeneratorExp { elt, generators } => todo!(),
-      ExprKind::Await { value } => todo!(),
-      ExprKind::Yield { value } => todo!(),
-      ExprKind::YieldFrom { value } => todo!(),
       ExprKind::Compare { left, ops, comparators } => {
-        let left = left.compile()?;
-        let mut comp = comparators.iter().map(|x| x.compile()).collect::<PyResult<Vec<Exp>>>()?;
-        comp.insert(0, left);
+        let base = left.compile()?;
+        let comp = comparators.iter().map(|x| x.compile()).collect::<PyResult<Vec<Exp>>>()?;
         let ops = ops.iter().map(|x| x.compile()).collect::<PyResult<Vec<Oper>>>()?;
         let comparisons = comp.windows(2) // zips (a[n], a[n+1])
           .zip(ops) // zips ((comp[n], comp[n+1]), op[n])
           .map(|(w, op)| Exp::BinOp { op, left: Box::new(w[0].clone()), right:Box::new(w[1].clone()) });
         // TODO: split comparisons into head, tail, and use head as base for fold.
-        let term = comparisons
-          .fold(Exp::Unsigned {numb:1}, |acc, val|
-                Exp::BinOp { op: Oper::And, left: Box::new(acc), right: Box::new(val) }
-          );
+        let term = comparisons.fold(base, |acc, val| Exp::BinOp { op: Oper::And, left: Box::new(acc), right: Box::new(val) });
         Ok(term)
       }
       ExprKind::Call { func, args, keywords } => {
@@ -358,44 +331,74 @@ impl Compile<Exp> for ExprKind {
         };
         Ok(call)
       },
-      ExprKind::FormattedValue { value, conversion, format_spec } => todo!(),
-      ExprKind::JoinedStr { values } => todo!(),
       ExprKind::Constant { value, kind } => value.compile(),
-      ExprKind::Attribute { value, attr, ctx } => todo!(),
-      ExprKind::Subscript { value, slice, ctx } => todo!(),
-      ExprKind::Starred { value, ctx } => todo!(),
       ExprKind::Name { id, ctx } => {
         let name = id.clone();
         Ok(Exp::Var { name })
       },
-      ExprKind::List { elts, ctx } => todo!(),
+      ExprKind::List { elts, ctx } => {
+        let exprs = elts.iter().map(|x| x.compile()).collect::<PyResult<Vec<Exp>>>()?;// collect to remove result as a whole
+        let nil  = Exp::Ctr { name: "List.nil".into(), args: vec![]};
+        let list = exprs.into_iter().rfold(nil, |list, exp| Exp::Ctr {name: "List.cons".into(), args: vec![exp, list]});
+        Ok(list)
+      },
       ExprKind::Tuple { elts, ctx } => {
         let exprs = elts.iter().map(|x| x.compile()).collect::<PyResult<Vec<Exp>>>()?;
         let tuple = Exp::Ctr {name: "Tuple".into(), args: exprs};
         Ok(tuple)
       },
       ExprKind::Slice { lower, upper, step } => todo!(),
+      ExprKind::SetComp { elt, generators } => todo!(),
+      ExprKind::DictComp { key, value, generators } => todo!(),
+      ExprKind::GeneratorExp { elt, generators } => todo!(),
+      ExprKind::Await { value } => todo!(),
+      ExprKind::Yield { value } => todo!(),
+      ExprKind::YieldFrom { value } => todo!(),
+      ExprKind::Attribute { value, attr, ctx } => todo!(),
+      ExprKind::Subscript { value, slice, ctx } => todo!(),
+      ExprKind::Starred { value, ctx } => todo!(),
+      ExprKind::FormattedValue { value, conversion, format_spec } => todo!(),
+      ExprKind::JoinedStr { values } => todo!(),
+      ExprKind::IfExp { test, body, orelse } => todo!(),
+      ExprKind::Dict { keys, values } => todo!(),
+      ExprKind::Set { elts } => todo!(),
+      ExprKind::BoolOp { op, values } => todo!(),
+      ExprKind::NamedExpr { target, value } => todo!(),
     }
   }
 }
 
-// trait ToPy {
-//   fn readback(self) -> PyObject;
-// }
 
-// impl ToPy for Term {
-//   fn readback(self) -> PyObject {
-//     match self {
-//         Term::Var { name } => todo!(),
-//         Term::Dup { nam0, nam1, expr, body } => panic!("Dup should not appear in result"),
-//         Term::Sup { val0, val1 } => panic!("Sup should not appear in result"),
-//         Term::Let { name, expr, body } => todo!(),
-//         Term::Lam { name, body } => todo!(),
-//         Term::App { func, argm } => todo!(),
-//         Term::Ctr { name, args } => todo!(),
-//         Term::U6O { numb } => todo!(),
-//         Term::F6O { numb } => todo!(),
-//         Term::Op2 { oper, val0, val1 } => todo!(),
-//     }
+// fn readback(term: hvm::Term) -> PyResult<PyAny> {
+
+//   fn rec(term: hvm::Term, env: &mut HashMap<String, PyAny>) -> PyResult<PyAny>{
+//     Python::with_gil(|py| {
+//       match term {
+//         hvm::Term::Var { name } => {
+//           if let Some(val) = env.get(&name) {
+//             Ok(*val)
+//           }
+//           else {
+//             Err(UnboundVar::new_err(format!("{name} is unboud")))
+//           }
+//         },
+//         hvm::Term::Lam { name, body } => {
+//           PyCFunction::new_closure(|args, _kwargs| {
+//             let var = args.get_item(0)?;
+//             env.insert(name, *var);
+//             rec(*body, env)
+//           }, py).map(|x| x.to_object(py))
+//         },
+//         hvm::Term::App { func, argm } => todo!(),
+//         hvm::Term::Ctr { name, args } => todo!(),
+//         hvm::Term::U6O { numb } => Ok(numb.to_object(py)),
+//         hvm::Term::F6O { numb } => todo!(),
+//         hvm::Term::Op2 { oper, val0, val1 } => todo!(),
+//         hvm::Term::Let { name, expr, body } => unreachable!("Let should not appear as result of normalization."),
+//         hvm::Term::Dup { .. } => unreachable!("Dup should not appear as result of normalization."),
+//         hvm::Term::Sup { .. } => unreachable!("Sup should not appear as result of normalization."),
+//       }
+//     })
 //   }
+//   rec(term, &mut HashMap::new())
 // }
