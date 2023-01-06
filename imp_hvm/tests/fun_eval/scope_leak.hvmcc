@@ -1,0 +1,9 @@
+function A (var) {
+  {A var} = 0
+}
+
+function Main () {
+  {Main} =
+    let a = (A 1);
+    var
+}
