@@ -49,22 +49,20 @@ fn test_fun_to_hvm() {
 
 #[test]
 fn test_fun_eval() {
-  use imp_hvm::fun::*;
-  use std::collections::HashMap;
   let run = |path: &Path| {
     let entry = fs::read_to_string(path).unwrap();
     match FuncProgramParser::new().parse(&entry) {
       Ok(fprog) => {
         let imp_hvm::FuncProgram(funcs) = fprog;
-        let mut env = eval::Env::new();
-        let rules: HashMap<_, _> = funcs
-          .into_iter()
-          .map(|syntax::Function { name, args, rules }| (name.clone(), syntax::Function {name, args, rules}))
-          .collect();
-        let main = rules.get("Main").unwrap().rules[0].rhs.clone();
-        env.rules = rules;
-        let expr = eval::eval(&main, &mut env).unwrap();
-        expr.to_string()
+        let mut env = imp_hvm::eval::Env::new();
+        env.add_functions(funcs);
+        if let imp_hvm::eval::Callable::Function(main) = env.rules.get("Main").unwrap() {
+            let main = main.clone();
+            let expr = imp_hvm::eval::eval_func(&mut env, &main, &vec![]).unwrap();
+            expr.to_string()
+        } else {
+            String::from("'Main' is a Procedure and not a Function.")
+        }
       }
       Err(err) => err.to_string()
     }
