@@ -189,8 +189,16 @@ fn matches(term: &Expr, lhs: &Expr) -> Option<Vec<(String, Expr)>> {
 /// Then, evaluates `term` and remove those binds,
 /// in order to do proper lexical scoping
 fn eval_expr_with(binds: Vec<(String, Expr)>, term: &Expr, env: &mut Env) -> EvalResult<Expr> {
+  let vars: Vec<Id> = binds.iter().map(|(x, _)| x.clone()).collect();
+  // Add bindings
   let old_binds = env.add_vars(binds);
+  // Evaluate
   let ret = eval_expr(term, env);
+  // Remove bindings
+  for var in vars {
+    env.vars.remove(&var);
+  }
+  // Restore old values
   for (name, value) in old_binds {
     env.vars.insert(name, value);
   }
