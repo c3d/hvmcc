@@ -1,21 +1,20 @@
-mod imp;
 mod fun;
+mod imp;
 
-use std::collections::HashMap;
 use crate::fun::{Expr, Function};
 use crate::imp::Procedure;
 pub use fun::eval_func;
 pub use imp::eval_proc;
-
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum EvaluationError {
   UnboundVar { name: String },
   DivisionBy0,
-  NonExaustivePatternMatch { pattern: Expr},
+  NonExaustivePatternMatch { pattern: Expr },
   FunctionDoesntExist { name: String },
-  CannotApplyNonLambda { not_func: Expr, arg: Expr},
-  UnsupportedBinaryOp {left: Expr, right: Expr}
+  CannotApplyNonLambda { not_func: Expr, arg: Expr },
+  UnsupportedBinaryOp { left: Expr, right: Expr },
 }
 
 pub type EvalResult<A> = Result<A, EvaluationError>;
@@ -36,7 +35,7 @@ impl Env {
   pub fn new() -> Self {
     let vars = HashMap::new();
     let rules = HashMap::new();
-    Env {vars, rules}
+    Env { vars, rules }
   }
 
   pub fn add_vars(&mut self, vars: Vec<(String, Expr)>) -> Vec<(String, Expr)> {

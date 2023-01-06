@@ -1,5 +1,5 @@
-use crate::{Imp, CaseStmt, Procedure, Program, StmtBlock};
 use crate::fun::print::pprint_fun;
+use crate::{CaseStmt, Imp, Procedure, Program, StmtBlock};
 
 /// Pads the string n characters to the right
 pub fn ind(string: &str, n: usize) -> String {
@@ -18,16 +18,16 @@ fn pprint_stmt_block(block: &StmtBlock, depth: usize) -> String {
 
 // Converts a body and else blocks of a statement into a `begin stmts; else stmts; end` string
 fn pprint_begin_else(body: &StmtBlock, else_case: &StmtBlock, depth: usize) -> String {
-  let body = pprint_stmt_block(body, depth+2);
+  let body = pprint_stmt_block(body, depth + 2);
   let i_else = ind("else", depth);
-  let else_case = pprint_stmt_block(else_case, depth+2);
+  let else_case = pprint_stmt_block(else_case, depth + 2);
   let i_end = ind("end", depth);
   format!("\n{body}\n{i_else}\n{else_case}\n{i_end}")
 }
 
 // Same as pprint_begin_else but without the else clause (`begin stmts; end`)
 fn pprint_block_end(body: &StmtBlock, depth: usize) -> String {
-  let body = pprint_stmt_block(body, depth+2);
+  let body = pprint_stmt_block(body, depth + 2);
   let i_end = ind("end", depth);
   format!("\n{body}\n{i_end}")
 }
@@ -37,11 +37,11 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
     Imp::Assignment { name, expr } => {
       let name = ind(name, depth);
       format!("{name} = {expr};")
-    },
+    }
     Imp::Expression { expr } => {
       let expr = pprint_fun(expr, depth);
       format!("{expr};")
-    },
+    }
     Imp::MatchStmt { expr, cases, default } => {
       fn display_case(case: &CaseStmt, depth: usize) -> String {
         let CaseStmt { matched, body } = case;
@@ -49,33 +49,35 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
         let b_block = pprint_block_end(body, depth);
         format!("{matched} => {b_block}",)
       }
-      let cases = vec_to_string(cases, &|x| display_case(x, depth+2), "\n");
+      let cases = vec_to_string(cases, &|x| display_case(x, depth + 2), "\n");
       let imatch = ind("match", depth);
-      let dflt_block = pprint_stmt_block(default, depth+2);
+      let dflt_block = pprint_stmt_block(default, depth + 2);
       format!("{imatch} {expr} \n{cases}\nelse\n{dflt_block}\nend")
-    },
+    }
     Imp::IfElse { condition, true_case, false_case } => {
       let iif = ind("if", depth);
       let blocks = pprint_begin_else(true_case, false_case, depth);
       format!("{iif} {condition} {blocks}")
-    },
+    }
     Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
       let ifor = ind("for", depth);
       // TODO: breaks indentation if there's a block expression in the for
       let blocks = pprint_begin_else(body, else_case, depth);
       format!("{ifor} ({initialize}, {condition}, {afterthought}) {blocks}")
-    },
+    }
     Imp::ForInElse { target, iterator, body, else_case } => {
       let ifor = ind("for", depth);
       let blocks = pprint_begin_else(body, else_case, depth);
       format!("{ifor} {target} in {iterator} {blocks}")
-    },
+    }
     Imp::WhileElse { condition, body, else_case } => {
       let iwhile = ind("while", depth);
       let blocks = pprint_begin_else(body, else_case, depth);
       format!("{iwhile} {condition} {blocks}")
-    },
-    Imp::Label { name, stmt } => format!("{}: {}", ind(name, depth), pprint_imp(stmt, depth)),
+    }
+    Imp::Label { name, stmt } => {
+      format!("{}: {}", ind(name, depth), pprint_imp(stmt, depth))
+    }
     Imp::Return { value } => format!("{} {};", ind("return", depth), value),
     Imp::Goto { name } => format!("{} {};", ind("goto", depth), name),
     Imp::Continue => ind("continue;", depth),
@@ -92,7 +94,7 @@ impl std::fmt::Display for Imp {
 
 impl std::fmt::Display for Procedure {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let Procedure {name, args, body} = self;
+    let Procedure { name, args, body } = self;
     let args = args.join(", ");
     let body_block = pprint_block_end(body, 0);
     write!(f, "procedure {name} ({args}) {body_block}")

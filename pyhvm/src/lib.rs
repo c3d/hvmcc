@@ -1,8 +1,8 @@
 pub mod compiler;
 
 use pyo3::prelude::*;
-use rustpython_parser::parser as pyparser;
 use rustpython_parser::mode::Mode;
+use rustpython_parser::parser as pyparser;
 //use imp_hvm::compile_program;
 use compiler::Compile;
 //use hvm::Term;
@@ -16,14 +16,13 @@ pub struct Runtime {
 pub fn init_runtime() -> Runtime {
   let size = hvm::default_heap_size();
   let tids = hvm::default_heap_tids();
-  Runtime {
-    runtime: hvm::Runtime::new(size, tids, true)
-  }
+  Runtime { runtime: hvm::Runtime::new(size, tids, true) }
 }
 
 #[pyfunction]
 pub fn compile_rules(_rt: &mut Runtime, code: &str) -> PyResult<()> {
-  let tree = pyparser::parse(code, Mode::Module, "<pyhvm>").expect("Could not parse function source.");
+  let tree =
+    pyparser::parse(code, Mode::Module, "<pyhvm>").expect("Could not parse function source.");
   let program = tree.compile()?;
   println!("{}", program);
   // let rules = compile_program(program);

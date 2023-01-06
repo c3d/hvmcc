@@ -1,12 +1,13 @@
-#[macro_use] extern crate lalrpop_util;
+#[macro_use]
+extern crate lalrpop_util;
+pub mod eval;
 pub mod fun;
 pub mod imp;
-pub mod eval;
 lalrpop_mod!(pub parser, "/parser.rs");
 
-pub use crate::imp::*;
-pub use crate::fun::*;
 pub use crate::eval::*;
+pub use crate::fun::*;
+pub use crate::imp::*;
 // it's easier to just export everything right now
 
 use hvm::syntax::File;

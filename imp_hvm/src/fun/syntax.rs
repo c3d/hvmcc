@@ -5,7 +5,7 @@ pub type Id = String;
 #[derive(Clone, Debug)]
 pub enum Expr {
   Unit,
-  Ctr { name: Id, args: Vec<Expr> }, // Datatype Haskell
+  Ctr { name: Id, args: Vec<Expr> },     // Datatype Haskell
   FunCall { name: Id, args: Vec<Expr> }, // Function that pattern matches
   Let { name: Id, expr: Box<Expr>, body: Box<Expr> },
   App { expr: Box<Expr>, argm: Box<Expr> },

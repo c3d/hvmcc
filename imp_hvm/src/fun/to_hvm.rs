@@ -1,6 +1,6 @@
 use crate::fun::syntax as fun;
-use hvm::language::syntax as hvm;
 use ::hvm::runtime::data::{f60, u60};
+use hvm::language::syntax as hvm;
 use std::collections::HashSet;
 
 pub fn compile_function(function: fun::Function) -> Result<hvm::File, String> {
@@ -12,10 +12,7 @@ pub fn compile_function(function: fun::Function) -> Result<hvm::File, String> {
   Ok(hvm::File { rules, smaps: Vec::new() })
 }
 
-pub fn compile_rule(
-  fn_name: &fun::Id,
-  mut rule: fun::Rule,
-) -> Result<hvm::File, String> {
+pub fn compile_rule(fn_name: &fun::Id, mut rule: fun::Rule) -> Result<hvm::File, String> {
   if !is_valid_lhs(&rule.lhs) {
     return Err(format!("Invalid lhs: {}", &rule.lhs));
   }
@@ -54,28 +51,20 @@ pub fn compile_expr(expr: &fun::Expr) -> Result<Box<hvm::Term>, String> {
       }
       Term::Ctr { name: name.clone(), args }
     }
-    Expr::Let { name, expr, body } => Term::Let {
-      name: name.clone(),
-      expr: compile_expr(expr)?,
-      body: compile_expr(body)?,
-    },
-    Expr::App { expr, argm } => {
-      Term::App { func: compile_expr(expr)?, argm: compile_expr(argm)? }
+    Expr::Let { name, expr, body } => {
+      Term::Let { name: name.clone(), expr: compile_expr(expr)?, body: compile_expr(body)? }
     }
+    Expr::App { expr, argm } => Term::App { func: compile_expr(expr)?, argm: compile_expr(argm)? },
     Expr::Var { name } => Term::Var { name: name.clone() },
     Expr::Unsigned { numb } => Term::U6O { numb: u60::new(*numb) },
     Expr::Float { numb } => Term::F6O { numb: f60::new(*numb) },
-    Expr::BinOp { op, left, right } => Term::Op2 {
-      oper: *op,
-      val0: compile_expr(left)?,
-      val1: compile_expr(right)?,
-    },
-    Expr::Lambda { var, body } => {
-      Term::Lam { name: var.clone(), body: compile_expr(body)? }
+    Expr::BinOp { op, left, right } => {
+      Term::Op2 { oper: *op, val0: compile_expr(left)?, val1: compile_expr(right)? }
     }
-    Expr::MatchExpr { .. } => unreachable!(
-      "Match expressions should be hoisted before converting to HVM"
-    ),
+    Expr::Lambda { var, body } => Term::Lam { name: var.clone(), body: compile_expr(body)? },
+    Expr::MatchExpr { .. } => {
+      unreachable!("Match expressions should be hoisted before converting to HVM")
+    }
   };
   Ok(Box::new(term))
 }
@@ -107,18 +96,11 @@ pub fn is_valid_pat(expr: &fun::Expr) -> bool {
   }
 }
 
-pub fn hoist_matches(
-  expr: &mut fun::Expr,
-  fn_name: &fun::Id,
-  hoisted: &mut Vec<fun::Function>,
-) {
+pub fn hoist_matches(expr: &mut fun::Expr, fn_name: &fun::Id, hoisted: &mut Vec<fun::Function>) {
   // TODO: There are probably situations where we also want to hoist lambdas
   use fun::Expr;
   match expr {
-    Expr::Unit
-    | Expr::Var { .. }
-    | Expr::Unsigned { .. }
-    | Expr::Float { .. } => (),
+    Expr::Unit | Expr::Var { .. } | Expr::Unsigned { .. } | Expr::Float { .. } => (),
     Expr::Ctr { args, .. } => {
       for arg in args {
         hoist_matches(arg, fn_name, hoisted);
@@ -150,9 +132,8 @@ pub fn hoist_matches(
       for case in cases.iter() {
         let pat_vars = get_unbound_vars(&case.matched);
         let body_vars = get_unbound_vars(&case.body);
-        let diff: HashSet<String> =
-          body_vars.difference(&pat_vars).map(String::clone).collect();
-          ctx_names.extend(diff);
+        let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
+        ctx_names.extend(diff);
       }
       let ctx_vars = ctx_names.iter().map(|x| Expr::Var { name: x.clone() });
       // Create the hoisted function
@@ -229,8 +210,7 @@ pub fn get_unbound_vars(expr: &fun::Expr) -> HashSet<fun::Id> {
       for case in cases {
         let pat_vars = get_unbound_vars(&case.matched);
         let body_vars = get_unbound_vars(&case.body);
-        let diff: HashSet<String> =
-          body_vars.difference(&pat_vars).map(String::clone).collect();
+        let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
         vars.extend(diff);
       }
       vars

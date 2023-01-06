@@ -1,13 +1,13 @@
-use crate::fun::syntax::*;
-use super::{Callable, Env, EvalResult, EvaluationError};
 use super::imp::eval_proc;
+use super::{Callable, Env, EvalResult, EvaluationError};
+use crate::fun::syntax::*;
 
 /// Evaluates a function call
-pub fn eval_func(env: &mut Env, func: &Function, args: &[Expr]) -> EvalResult<Expr>{
+pub fn eval_func(env: &mut Env, func: &Function, args: &[Expr]) -> EvalResult<Expr> {
   let args = args.iter().map(|x| eval_expr(x, env)).collect::<EvalResult<Vec<Expr>>>()?;
   let name = func.name.clone();
   let ctr = Expr::Ctr { name: name.clone(), args: args.clone() };
-  for Rule {lhs, rhs} in func.rules.iter() {
+  for Rule { lhs, rhs } in func.rules.iter() {
     if let Some(binds) = matches(&ctr, lhs) {
       return eval_expr_with(binds, rhs, env);
     }
@@ -21,12 +21,9 @@ pub fn eval_expr(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
   match term {
     Expr::Ctr { name, args } => {
       let name = name.clone();
-      let args = args
-        .iter()
-        .map(|x| eval_expr(x, env))
-        .collect::<EvalResult<Vec<Expr>>>()?;
+      let args = args.iter().map(|x| eval_expr(x, env)).collect::<EvalResult<Vec<_>>>()?;
       Ok(Expr::Ctr { name, args })
-    },
+    }
     Expr::FunCall { name, args } => {
       if let Some(call) = env.rules.get(name) {
         match call {
@@ -41,27 +38,27 @@ pub fn eval_expr(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
       let expr = eval_expr(expr, env)?;
       let bind = vec![(name.clone(), expr)];
       eval_expr_with(bind, body, env)
-    },
+    }
     Expr::App { expr, argm } => {
       let func = eval_expr(expr, env)?;
       match func {
-        Expr::Lambda {var, body} => {
+        Expr::Lambda { var, body } => {
           let val = eval_expr(argm, env)?;
           let bind = vec![(var, val)];
           eval_expr_with(bind, &body, env)
-        },
-        term => Err(EvaluationError::CannotApplyNonLambda { not_func: term, arg: *argm.clone() })
+        }
+        term => Err(EvaluationError::CannotApplyNonLambda { not_func: term, arg: *argm.clone() }),
       }
-    },
+    }
     Expr::Var { name } => {
       if let Some(expr) = env.vars.get(name) {
         Ok(expr.clone())
       } else {
         Err(EvaluationError::UnboundVar { name: name.clone() })
       }
-    },
+    }
     Expr::MatchExpr { scrutinee, cases } => {
-      for CaseExpr {matched, body} in cases {
+      for CaseExpr { matched, body } in cases {
         let expr = eval_expr(scrutinee, env)?;
         if let Some(binds) = matches(&expr, matched) {
           return eval_expr_with(binds, body, env);
@@ -69,42 +66,41 @@ pub fn eval_expr(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
       }
       let pattern = *scrutinee.clone();
       Err(EvaluationError::NonExaustivePatternMatch { pattern })
-    },
+    }
     Expr::Lambda { var, body } => {
-      let bind = vec![(var.clone(), Expr::Var {name: var.clone()})];
+      let bind = vec![(var.clone(), Expr::Var { name: var.clone() })];
       // bind the variable to itself, in order to not change semantics of unbound variables.
       let body = Box::new(eval_expr_with(bind, body, env)?);
       let var = var.clone();
-      Ok(Expr::Lambda {var, body})
+      Ok(Expr::Lambda { var, body })
       // return the new lambda with eval_expr'd body.
-    },
+    }
     Expr::BinOp { op, left, right } => {
-      let left  = eval_expr(left, env)?;
+      let left = eval_expr(left, env)?;
       let right = eval_expr(right, env)?;
       if let (&Expr::Unsigned { numb: a }, &Expr::Unsigned { numb: b }) = (&left, &right) {
         let new = |x: u64| x & 0xFFF_FFFF_FFFF_FFFF;
         let numb = match op {
           Oper::Add => Ok(new(a + b)),
-          Oper::Sub => Ok(if a >= b { a - b } else { 0x1000000000000000 - (b - a) }) ,
+          Oper::Sub => Ok(if a >= b { a - b } else { 0x1000000000000000 - (b - a) }),
           Oper::Mul => Ok(new((a as u128 * b as u128) as u64)),
           Oper::Div => {
             if b == 0 {
               Err(EvaluationError::DivisionBy0)
-            }
-            else {
+            } else {
               Ok(a / b)
             }
-          },
+          }
           Oper::Mod => Ok(a % b),
           Oper::And => Ok(a & b),
-          Oper::Or  => Ok(a | b),
+          Oper::Or => Ok(a | b),
           Oper::Xor => Ok(a ^ b),
           Oper::Shl => Ok(new(a << b)),
           Oper::Shr => Ok(a >> b),
-          Oper::Lte => Ok(if a <  b { 1 } else { 0 }),
+          Oper::Lte => Ok(if a < b { 1 } else { 0 }),
           Oper::Ltn => Ok(if a <= b { 1 } else { 0 }),
           Oper::Eql => Ok(if a == b { 1 } else { 0 }),
-          Oper::Gte => Ok(if a >  b { 1 } else { 0 }),
+          Oper::Gte => Ok(if a > b { 1 } else { 0 }),
           Oper::Gtn => Ok(if a >= b { 1 } else { 0 }),
           Oper::Neq => Ok(if a != b { 1 } else { 0 }),
         }?;
@@ -117,33 +113,29 @@ pub fn eval_expr(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
           Oper::Div => {
             if b == 0.0 {
               Err(EvaluationError::DivisionBy0)
-            }
-            else {
+            } else {
               Ok(a / b)
             }
-          },
+          }
           Oper::Mod => Ok(a % b),
           Oper::And => Ok(f64::cos(a) + f64::sin(b)),
-          Oper::Or  => Ok(f64::atan2(a, b)),
+          Oper::Or => Ok(f64::atan2(a, b)),
           Oper::Xor => Ok(a.ceil() + a.floor()),
           Oper::Shl => Ok(b.powf(a)),
           Oper::Shr => Ok(a.log(b)),
-          Oper::Lte => Ok(if a <  b { 1.0 } else { 0.0 }),
+          Oper::Lte => Ok(if a < b { 1.0 } else { 0.0 }),
           Oper::Ltn => Ok(if a <= b { 1.0 } else { 0.0 }),
           Oper::Eql => Ok(if a == b { 1.0 } else { 0.0 }),
-          Oper::Gte => Ok(if a >  b { 1.0 } else { 0.0 }),
+          Oper::Gte => Ok(if a > b { 1.0 } else { 0.0 }),
           Oper::Gtn => Ok(if a >= b { 1.0 } else { 0.0 }),
           Oper::Neq => Ok(if a != b { 1.0 } else { 0.0 }),
         }?;
         Ok(Expr::Float { numb })
-      }
-      else {
+      } else {
         Err(EvaluationError::UnsupportedBinaryOp { left, right })
       }
-    },
-    Expr::Unit |
-    Expr::Unsigned { .. } |
-    Expr::Float { .. } => Ok(term.clone())
+    }
+    Expr::Unit | Expr::Unsigned { .. } | Expr::Float { .. } => Ok(term.clone()),
   }
 }
 
@@ -152,7 +144,10 @@ pub fn eval_expr(term: &Expr, env: &mut Env) -> EvalResult<Expr> {
 /// Otherwise return none.
 fn matches(term: &Expr, lhs: &Expr) -> Option<Vec<(String, Expr)>> {
   match (lhs, term) {
-    (Expr::Ctr {name: lhs_name, args: lhs_args}, Expr::Ctr {name: term_name, args: term_args}) => {
+    (
+      Expr::Ctr { name: lhs_name, args: lhs_args },
+      Expr::Ctr { name: term_name, args: term_args },
+    ) => {
       if lhs_name == term_name && lhs_args.len() == term_args.len() {
         // needs to check sizes because zips behaves weirdly on different size vectors
         // instead of just throwing an error.
@@ -165,19 +160,15 @@ fn matches(term: &Expr, lhs: &Expr) -> Option<Vec<(String, Expr)>> {
             _ => None,
           });
         binds
-      }
-      else {
+      } else {
         None
       }
-    },
-    (Expr::Var {name}, some_term) => {
-      Some(vec![(name.clone(), some_term.clone())])
     }
-    (Expr::Unsigned {numb:lhs_numb}, Expr::Unsigned{numb:term_numb}) => {
+    (Expr::Var { name }, some_term) => Some(vec![(name.clone(), some_term.clone())]),
+    (Expr::Unsigned { numb: lhs_numb }, Expr::Unsigned { numb: term_numb }) => {
       if lhs_numb == term_numb {
         Some(vec![])
-      }
-      else {
+      } else {
         None
       }
     }
