@@ -58,8 +58,11 @@ fn test_fun_eval() {
         env.add_functions(funcs);
         if let imp_hvm::eval::Callable::Function(main) = env.rules.get("Main").unwrap() {
             let main = main.clone();
-            let expr = imp_hvm::eval::eval_func(&mut env, &main, &vec![]).unwrap();
-            expr.to_string()
+            let eval_result = imp_hvm::eval::eval_func(&mut env, &main, &vec![]);
+            match eval_result {
+                Ok(expr) => expr.to_string(),
+                Err(err) => format!("{:?}", err),
+            }
         } else {
             String::from("'Main' is a Procedure and not a Function.")
         }
