@@ -13,7 +13,7 @@ pub FuncProgram: FuncProgram =
         FuncProgram(<>);
 
 Procedure: Procedure =
-    "procedure" <name:Id> "(" <args:Id*> ")" "begin" <body:Imp+> "end" =>
+    "procedure" <name:Id> "(" <args:Id*> ")" <body:Imp+> "end" =>
         Procedure{<>};
 
 pub Imp: Imp = {
@@ -46,9 +46,8 @@ pub Imp: Imp = {
 };
 
 CaseStmt: CaseStmt =
-    <matched:Expr> "=>" "begin" <body:Imp+> "end" =>
+    <matched:Expr> "=>" <body:Imp+> "end" =>
         CaseStmt{<>};
-
 
 pub Function: Function =
     "function" <name:Id> "(" <args:Id*> ")" "{" <rules:Rule+> "}" =>
