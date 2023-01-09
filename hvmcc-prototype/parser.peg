@@ -1,0 +1,20 @@
+Body = l:(Stmt ";")* { return l.map((x: any) => x[0]) }
+
+Block = "{" l:(Stmt ";")* "}" { return l.map((x: any) => x[0]) }
+
+Stmt = Assign
+     / If
+
+Expr = a:AtomicExpr "+" b:AtomicExpr { return ["+", a, b] }
+     / AtomicExpr
+
+AtomicExpr = Num
+           / Var
+
+Assign = v:Var "=" e:Expr { return ["assign", v, e] }
+
+If = "if" "(" e:Expr ")" b1:Block "else" b2:Block { return ["if", e, b1, b2] }
+
+Num = n:[0-9]+ { return parseInt(n.join("")) }
+
+Var = v:[a-z]+ { return v.join("") }

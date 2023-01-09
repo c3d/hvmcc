@@ -1,0 +1,9 @@
+{
+  "devDependencies": {
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "peggy": "^2.0.1",
+    "ts-pegjs": "^2.1.0"
+  }
+}
