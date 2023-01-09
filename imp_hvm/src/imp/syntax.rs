@@ -47,6 +47,11 @@ pub enum Imp {
   Goto {
     name: Id,
   },
+  ProcedureDef {
+    name: Id,
+    args: Vec<Id>,
+    body: StmtBlock,
+  },
   Continue,
   Break,
   Pass,
@@ -67,4 +72,4 @@ pub struct Procedure {
   pub body: StmtBlock,
 }
 
-pub struct Program(pub Vec<Procedure>);
+pub struct Program(pub Vec<Imp>);

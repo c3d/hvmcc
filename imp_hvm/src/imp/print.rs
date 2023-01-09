@@ -1,5 +1,5 @@
 use crate::fun::print::pprint_fun;
-use crate::{CaseStmt, Imp, Procedure, Program, StmtBlock};
+use crate::{CaseStmt, Imp, Program, StmtBlock};
 
 /// Pads the string n characters to the right
 pub fn ind(string: &str, n: usize) -> String {
@@ -16,8 +16,8 @@ fn pprint_stmt_block(block: &StmtBlock, depth: usize) -> String {
   vec_to_string(block, &|x| pprint_imp(x, depth), "\n")
 }
 
-// Converts a body and else blocks of a statement into a `begin stmts; else stmts; end` string
-fn pprint_begin_else(body: &StmtBlock, else_case: &StmtBlock, depth: usize) -> String {
+// Converts a body and else blocks of a statement into a `stmts; else stmts; end` string
+fn pprint_block_else(body: &StmtBlock, else_case: &StmtBlock, depth: usize) -> String {
   let body = pprint_stmt_block(body, depth + 2);
   let i_else = ind("else", depth);
   let else_case = pprint_stmt_block(else_case, depth + 2);
@@ -25,7 +25,7 @@ fn pprint_begin_else(body: &StmtBlock, else_case: &StmtBlock, depth: usize) -> S
   format!("\n{body}\n{i_else}\n{else_case}\n{i_end}")
 }
 
-// Same as pprint_begin_else but without the else clause (`begin stmts; end`)
+// Same as pprint_begin_else but without the else clause (`stmts; end`)
 fn pprint_block_end(body: &StmtBlock, depth: usize) -> String {
   let body = pprint_stmt_block(body, depth + 2);
   let i_end = ind("end", depth);
@@ -56,23 +56,23 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
     }
     Imp::IfElse { condition, true_case, false_case } => {
       let iif = ind("if", depth);
-      let blocks = pprint_begin_else(true_case, false_case, depth);
+      let blocks = pprint_block_else(true_case, false_case, depth);
       format!("{iif} {condition} {blocks}")
     }
     Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
       let ifor = ind("for", depth);
       // TODO: breaks indentation if there's a block expression in the for
-      let blocks = pprint_begin_else(body, else_case, depth);
+      let blocks = pprint_block_else(body, else_case, depth);
       format!("{ifor} ({initialize}, {condition}, {afterthought}) {blocks}")
     }
     Imp::ForInElse { target, iterator, body, else_case } => {
       let ifor = ind("for", depth);
-      let blocks = pprint_begin_else(body, else_case, depth);
+      let blocks = pprint_block_else(body, else_case, depth);
       format!("{ifor} {target} in {iterator} {blocks}")
     }
     Imp::WhileElse { condition, body, else_case } => {
       let iwhile = ind("while", depth);
-      let blocks = pprint_begin_else(body, else_case, depth);
+      let blocks = pprint_block_else(body, else_case, depth);
       format!("{iwhile} {condition} {blocks}")
     }
     Imp::Label { name, stmt } => {
@@ -83,21 +83,17 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
     Imp::Continue => ind("continue;", depth),
     Imp::Break => ind("break;", depth),
     Imp::Pass => ind("pass;", depth),
+    Imp::ProcedureDef { name, args, body } => {
+      let args = args.join(", ");
+      let body_block = pprint_block_end(body, 0);
+      format!("procedure {name} ({args}) {body_block}")
+    },
   }
 }
 
 impl std::fmt::Display for Imp {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     write!(f, "{}", pprint_imp(self, 0))
-  }
-}
-
-impl std::fmt::Display for Procedure {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    let Procedure { name, args, body } = self;
-    let args = args.join(", ");
-    let body_block = pprint_block_end(body, 0);
-    write!(f, "procedure {name} ({args}) {body_block}")
   }
 }
 
