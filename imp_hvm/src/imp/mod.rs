@@ -1,4 +1,3 @@
-pub mod braun;
 pub mod print;
 pub mod syntax;
 pub mod to_fun;

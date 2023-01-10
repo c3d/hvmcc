@@ -1,3 +1,5 @@
+mod ssa;
+
 use crate::fun::{Expr, Id};
 use crate::imp::{CaseStmt, Imp, Procedure};
 use std::collections::HashSet;
