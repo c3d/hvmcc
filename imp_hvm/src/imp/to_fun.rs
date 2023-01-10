@@ -41,12 +41,13 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>)
       let name = format!("{proc_name}.{name}");
       let vars = unbound_in_block(body);
       let args: HashSet<Id> = args.iter().cloned().collect();
-      let diff: Vec<Id> = vars.difference(&args).map(String::clone).collect(); 
-      let new_proc = Procedure {name, args: diff, body: body.clone()};
+      let diff: Vec<Id> = vars.difference(&args).map(String::clone).collect();
+      let new_proc = Procedure { name: name.clone(), args: diff, body: body.clone() };
       // TODO:i think this is not enough,
       // and for every call of this new proc, it should add the `diff` arguments by default.
       // this should be done by the way of mapping when translating.
       hoisted.push(new_proc);
+      hoist_block(body, &name, hoisted);
       *proc = Imp::Pass;
     }
   }
@@ -117,8 +118,8 @@ fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
 }
 
 fn unbound_in_block(block: &Vec<Imp>) -> HashSet<Id> {
-    block
-      .iter()
-      .map(unbound_in_stmt)
-      .fold(HashSet::new(), |acc, val| acc.union(&val).map(String::clone).collect())
-  }
+  block
+    .iter()
+    .map(unbound_in_stmt)
+    .fold(HashSet::new(), |acc, val| acc.union(&val).map(String::clone).collect())
+}
