@@ -13,20 +13,22 @@ pub FuncProgram: FuncProgram =
         FuncProgram(<>);
 
 pub Imp: Imp = {
-    "procedure" <name:Id> "(" <args:Id*> ")" <body:Imp+> "end" =>
-        Imp::ProcedureDef{<>},
+    "begin" <stmts: Imp*> "end" =>
+        Imp::Block{<>},
+    "procedure" <name:Id> "(" <args:Id*> ")" <body:Imp> =>
+        Imp::ProcedureDef{ name, args, body: Box::new(body) },
     <name:Id> ":" <stmt:Imp> =>
         Imp::Label { name, stmt: Box::new(stmt) },
-    "match" <expr:Expr> <cases:CaseStmt*> "else" <default:Imp+> "end" =>
-        Imp::MatchStmt {<>},
-    "if" <condition:Expr> <true_case:Imp+> "else" <false_case:Imp+> "end" =>
-        Imp::IfElse{<>},
-    "for" "(" <initialize:Imp> "," <condition:Expr> "," <afterthought:Imp> ")" <body:Imp+> "else" <else_case:Imp+> "end" =>
-        Imp::ForElse{ initialize: Box::new(initialize), condition, afterthought: Box::new(afterthought), body, else_case },
-    "for" <target:Id> "in" <iterator:Expr> <body:Imp+> "else" <else_case:Imp+> "end" =>
-        Imp::ForInElse{<>},
-    "while" <condition:Expr> <body:Imp+> "else" <else_case:Imp+> "end" =>
-        Imp::WhileElse{<>},
+    "match" <expr:Expr> <cases:CaseStmt*> "else" <default:Imp> =>
+        Imp::MatchStmt { expr, cases, default: Box::new(default) },
+    "if" <condition:Expr> <true_case:Imp> "else" <false_case:Imp> =>
+        Imp::IfElse{ condition, true_case: Box::new(true_case), false_case: Box::new(false_case) },
+    "for" "(" <initialize:Imp> "," <condition:Expr> "," <afterthought:Imp> ")" <body:Imp> "else" <else_case:Imp> =>
+        Imp::ForElse{ initialize: Box::new(initialize), condition, afterthought: Box::new(afterthought), body: Box::new(body), else_case: Box::new(else_case) },
+    "for" <target:Id> "in" <iterator:Expr> <body:Imp> "else" <else_case:Imp> =>
+        Imp::ForInElse{target, iterator, body: Box::new(body), else_case: Box::new(else_case)},
+    "while" <condition:Expr> <body:Imp> "else" <else_case:Imp> =>
+        Imp::WhileElse{condition, body: Box::new(body), else_case: Box::new(else_case)},
     <name:Id> "=" <expr:Expr> ";" =>
         Imp::Assignment{<>},
     <expr: Expr> ";" =>
@@ -44,7 +46,7 @@ pub Imp: Imp = {
 };
 
 CaseStmt: CaseStmt =
-    <matched:Expr> "=>" <body:Imp+> "end" =>
+    <matched:Expr> "=>" <body:Imp> "end" =>
         CaseStmt{<>};
 
 pub Function: Function =

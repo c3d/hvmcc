@@ -1,5 +1,5 @@
 use crate::fun::print::pprint_fun;
-use crate::{CaseStmt, Imp, Program, StmtBlock};
+use crate::{CaseStmt, Imp, Program};
 
 /// Pads the string n characters to the right
 pub fn ind(string: &str, n: usize) -> String {
@@ -12,24 +12,12 @@ fn vec_to_string<T>(elems: &Vec<T>, func: &dyn Fn(&T) -> String, sep: &str) -> S
   elems.iter().map(func).collect::<Vec<String>>().join(sep)
 }
 
-fn pprint_stmt_block(block: &StmtBlock, depth: usize) -> String {
-  vec_to_string(block, &|x| pprint_imp(x, depth), "\n")
-}
-
-// Converts a body and else blocks of a statement into a `stmts; else stmts; end` string
-fn pprint_block_else(body: &StmtBlock, else_case: &StmtBlock, depth: usize) -> String {
-  let body = pprint_stmt_block(body, depth + 2);
+// Converts a body and else blocks of a statement into a `begin stmts; end else begin stmts; end` string
+fn pprint_block_else(body: &Imp, else_case: &Imp, depth: usize) -> String {
+  let body = pprint_imp(body, depth + 2);
   let i_else = ind("else", depth);
-  let else_case = pprint_stmt_block(else_case, depth + 2);
-  let i_end = ind("end", depth);
-  format!("\n{body}\n{i_else}\n{else_case}\n{i_end}")
-}
-
-// Same as pprint_begin_else but without the else clause (`stmts; end`)
-fn pprint_block_end(body: &StmtBlock, depth: usize) -> String {
-  let body = pprint_stmt_block(body, depth + 2);
-  let i_end = ind("end", depth);
-  format!("\n{body}\n{i_end}")
+  let else_case = pprint_imp(else_case, depth + 2);
+  format!("\n{body}\n{i_else}\n{else_case}")
 }
 
 fn pprint_imp(imp: &Imp, depth: usize) -> String {
@@ -46,12 +34,12 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
       fn display_case(case: &CaseStmt, depth: usize) -> String {
         let CaseStmt { matched, body } = case;
         let matched = pprint_fun(matched, depth);
-        let b_block = pprint_block_end(body, depth);
+        let b_block = pprint_imp(body, depth);
         format!("{matched} => {b_block}",)
       }
       let cases = vec_to_string(cases, &|x| display_case(x, depth + 2), "\n");
       let imatch = ind("match", depth);
-      let dflt_block = pprint_stmt_block(default, depth + 2);
+      let dflt_block = pprint_imp(default, depth + 2);
       format!("{imatch} {expr} \n{cases}\nelse\n{dflt_block}\nend")
     }
     Imp::IfElse { condition, true_case, false_case } => {
@@ -84,9 +72,16 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
     Imp::Break => ind("break;", depth),
     Imp::Pass => ind("pass;", depth),
     Imp::ProcedureDef { name, args, body } => {
+      let procedure = ind("procedure", depth);
       let args = args.join(", ");
-      let body_block = pprint_block_end(body, 0);
-      format!("procedure {name} ({args}) {body_block}")
+      let body_block = pprint_imp(body, depth + 2);
+      format!("{procedure} {name} ({args})\n{body_block}")
+    }
+    Imp::Block { stmts } => {
+      let stmts = vec_to_string(stmts, &|x| pprint_imp(x, depth + 2), "\n");
+      let begin = ind("begin", depth);
+      let end = ind("end", depth);
+      format!("{begin}\n{stmts}\n{end}")
     },
   }
 }

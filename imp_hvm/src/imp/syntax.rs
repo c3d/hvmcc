@@ -2,6 +2,9 @@ use crate::fun::{Expr, Id};
 
 #[derive(Clone, Debug)]
 pub enum Imp {
+  Block {
+    stmts: Vec<Imp>
+  },
   Assignment {
     name: Id,
     expr: Expr,
@@ -12,30 +15,30 @@ pub enum Imp {
   MatchStmt {
     expr: Expr,
     cases: Vec<CaseStmt>,
-    default: StmtBlock,
+    default: Box<Imp>,
   },
   IfElse {
     condition: Expr,
-    true_case: StmtBlock,
-    false_case: StmtBlock,
+    true_case: Box<Imp>,
+    false_case: Box<Imp>,
   },
   ForElse {
     initialize: Box<Imp>,
     condition: Expr,
     afterthought: Box<Imp>,
-    body: StmtBlock,
-    else_case: StmtBlock,
+    body: Box<Imp>,
+    else_case: Box<Imp>,
   },
   ForInElse {
     target: Id,
     iterator: Expr,
-    body: StmtBlock,
-    else_case: StmtBlock,
+    body: Box<Imp>,
+    else_case: Box<Imp>,
   },
   WhileElse {
     condition: Expr,
-    body: StmtBlock,
-    else_case: StmtBlock,
+    body: Box<Imp>,
+    else_case: Box<Imp>,
   },
   Label {
     name: Id,
@@ -50,26 +53,24 @@ pub enum Imp {
   ProcedureDef {
     name: Id,
     args: Vec<Id>,
-    body: StmtBlock,
+    body: Box<Imp>,
   },
   Continue,
   Break,
   Pass,
 }
 
-pub type StmtBlock = Vec<Imp>;
-
 #[derive(Clone, Debug)]
 pub struct CaseStmt {
   pub matched: Expr,
-  pub body: StmtBlock,
+  pub body: Imp,
 }
 
 #[derive(Clone, Debug)]
 pub struct Procedure {
   pub name: Id,
   pub args: Vec<Id>,
-  pub body: StmtBlock,
+  pub body: Imp,
 }
 
 pub struct Program(pub Vec<Imp>);

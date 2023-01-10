@@ -84,7 +84,7 @@ impl Compile<Imp> for StmtKind {
       StmtKind::FunctionDef { name, args, body, decorator_list, returns, type_comment } => {
         let name = name.clone();
         let args = args_to_vector(args);
-        let body = body.compile()?;
+        let body = Box::new(body.compile()?);
         // fmap into result in order to avoid a match.
         Ok(Imp::ProcedureDef { name, args, body })
       }
@@ -103,14 +103,14 @@ impl Compile<Imp> for StmtKind {
       StmtKind::For { target, iter, body, orelse, type_comment } => {
         let target = compile_target(&vec![*target.clone()])?;
         let iterator = iter.compile()?;
-        let body = body.compile()?;
-        let else_case = orelse.compile()?;
+        let body = Box::new(body.compile()?);
+        let else_case = Box::new(orelse.compile()?);
         Ok(Imp::ForInElse { target, iterator, body, else_case })
       }
       StmtKind::While { test, body, orelse } => {
         let condition = test.compile()?;
-        let body = body.compile()?;
-        let else_case = orelse.compile()?;
+        let body = Box::new(body.compile()?);
+        let else_case = Box::new(orelse.compile()?);
         Ok(Imp::WhileElse { condition, body, else_case })
       }
       StmtKind::Expr { value } => {
@@ -119,8 +119,8 @@ impl Compile<Imp> for StmtKind {
       }
       StmtKind::If { test, body, orelse } => {
         let condition = test.compile()?;
-        let true_case = body.compile()?;
-        let false_case = orelse.compile()?;
+        let true_case = Box::new(body.compile()?);
+        let false_case = Box::new(orelse.compile()?);
         Ok(Imp::IfElse { condition, true_case, false_case })
       }
       StmtKind::Pass => Ok(Imp::Pass),
@@ -172,12 +172,16 @@ impl Compile<Imp> for StmtKind {
   }
 }
 
-impl Compile<Vec<Imp>> for Vec<Stmt> {
-  fn compile(&self) -> PyResult<Vec<Imp>> {
+impl Compile<Imp> for Vec<Stmt> {
+  fn compile(&self) -> PyResult<Imp> {
     if self.is_empty() {
-      Ok(vec![Imp::Pass])
-    } else {
-      self.iter().map(|x| x.compile()).collect()
+      Ok(Imp::Pass)
+    } else if let [stmt] = self.as_slice(){
+      Ok(stmt.compile()?)
+    }
+    else {
+      let stmts = self.iter().map(|x| x.compile()).collect::<PyResult<Vec<Imp>>>()?;
+      Ok(Imp::Block { stmts })
     }
   }
 }
