@@ -4,7 +4,7 @@
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
 //use pyo3::types::PyCFunction;
-use imp_hvm::{Expr as Exp, Imp, Oper, Procedure, Program};
+use imp_hvm::{Expr as Exp, Imp, Oper, Program};
 use num_traits::cast::ToPrimitive;
 use rustpython_parser::ast::*;
 
@@ -44,8 +44,8 @@ impl Compile<Program> for Mod {
     match self {
       // if it is a module, we compile it, expecting functions in the top level
       Mod::Module { body, type_ignores: _ } => {
-        let procs = body.iter().map(|x| x.compile()).collect::<Result<Vec<Procedure>, PyErr>>();
-        Ok(Program(procs?))
+        let procs = body.iter().map(|x| x.compile()).collect::<Result<Vec<Imp>, PyErr>>()?;
+        Ok(Program(procs))
       }
       // else, raise error.
       Mod::Expression { body: _ } | Mod::Interactive { body: _ } => {
@@ -81,8 +81,13 @@ impl Compile<Imp> for StmtKind {
 
     match self {
       // SUPPORTED STATEMENTS:
-      StmtKind::FunctionDef { name, args, body, decorator_list, returns, type_comment } => todo!(),
-      // funcdef should become lambda definitions.
+      StmtKind::FunctionDef { name, args, body, decorator_list, returns, type_comment } => {
+        let name = name.clone();
+        let args = args_to_vector(args);
+        let body = body.compile()?;
+        // fmap into result in order to avoid a match.
+        Ok(Imp::ProcedureDef { name, args, body })
+      }
       StmtKind::Return { value } => {
         let value = match value {
           Some(value) => value.compile()?,
@@ -163,21 +168,6 @@ impl Compile<Imp> for StmtKind {
       }
       StmtKind::Global { names } => not_supported("Global statement is not supported."),
       StmtKind::Nonlocal { names } => not_supported("Nonlocal statement is not supported yet."),
-    }
-  }
-}
-
-impl Compile<Procedure> for StmtKind {
-  fn compile(&self) -> PyResult<Procedure> {
-    match self {
-      StmtKind::FunctionDef { name, args, body, decorator_list, returns, type_comment } => {
-        let name = name.clone();
-        let args = args_to_vector(args);
-        let body = body.compile()?;
-        // fmap into result in order to avoid a match.
-        Ok(Procedure { name, args, body })
-      }
-      _ => not_supported("Only function definitions are accepted in the top level."),
     }
   }
 }

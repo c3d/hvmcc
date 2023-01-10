@@ -5,18 +5,16 @@ grammar;
 
 
 Program: Program =
-    <Procedure*> =>
+    <Imp*> =>
         Program(<>);
 
 pub FuncProgram: FuncProgram =
     <Function*> =>
         FuncProgram(<>);
 
-Procedure: Procedure =
-    "procedure" <name:Id> "(" <args:Id*> ")" <body:Imp+> "end" =>
-        Procedure{<>};
-
 pub Imp: Imp = {
+    "procedure" <name:Id> "(" <args:Id*> ")" <body:Imp+> "end" =>
+        Imp::ProcedureDef{<>},
     <name:Id> ":" <stmt:Imp> =>
         Imp::Label { name, stmt: Box::new(stmt) },
     "match" <expr:Expr> <cases:CaseStmt*> "else" <default:Imp+> "end" =>
