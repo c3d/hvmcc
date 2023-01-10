@@ -7,7 +7,7 @@ pub fn imp_to_fun(_imperative: Imp) -> Expr {
 }
 
 fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>) {
-  fn hoist_block(block: &mut Vec<Imp>, proc_name: &Id, hoisted: &mut Vec<Procedure>) {
+  fn hoist_block(block: &mut [Imp], proc_name: &Id, hoisted: &mut Vec<Procedure>) {
     block.iter_mut().map(|x| hoist_proc_defs(x, proc_name, hoisted));
   }
   match proc {
@@ -65,8 +65,8 @@ fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
     Imp::MatchStmt { expr, cases, default } => {
       let mut vars = unbound_in_expr(expr);
       for CaseStmt { matched, body } in cases {
-        let pat_vars = unbound_in_expr(&matched);
-        let body_vars = unbound_in_block(&body);
+        let pat_vars = unbound_in_expr(matched);
+        let body_vars = unbound_in_block(body);
         let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
         vars.extend(diff);
       }
