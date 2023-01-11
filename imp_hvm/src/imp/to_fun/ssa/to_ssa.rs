@@ -63,9 +63,16 @@ impl Converter {
         block
       }
       Imp::IfElse { condition, true_case, false_case } => {
-        // TODO: surely this is wrong since we're not using the condition expression
-        let t = self.convert_stmt(*true_case, block.clone());
-        let e = self.convert_stmt(*false_case, block);
+        let block = self.make_sealed_block(&[block.clone()]);
+        let condition = Imp::Expression { expr: condition };
+        let c = self.convert_stmt(condition, block);
+    
+        let c_s = self.make_sealed_block(&[c.clone()]);
+        let t = self.convert_stmt(*true_case, c_s);
+    
+        let c_s = self.make_sealed_block(&[c.clone()]);
+        let e = self.convert_stmt(*false_case, c_s);
+        
         self.make_sealed_block(&[t, e])
       }
       Imp::Block { stmts } => {
