@@ -33,11 +33,13 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>)
       hoist_proc_defs(body, proc_name, hoisted);
       hoist_proc_defs(else_case, proc_name, hoisted);
     }
-    Imp::Label { name: _, stmt } => {
+    Imp::Label {  stmt, .. } => {
       hoist_proc_defs(stmt, proc_name, hoisted);
     }
     Imp::Block { stmts } => {
-      stmts.iter_mut().map(|x| hoist_proc_defs(x, proc_name, hoisted));
+      for stmt in stmts {
+        hoist_proc_defs(stmt, proc_name, hoisted);
+      }
     }
     Imp::ProcedureDef { name, args, body } => {
       let name = format!("{proc_name}.{name}");

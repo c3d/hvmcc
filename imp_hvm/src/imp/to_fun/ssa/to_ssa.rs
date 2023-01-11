@@ -1,7 +1,7 @@
 use super::braun::BraunConverter;
 use super::{Block, Operand};
 use crate::fun::{Expr, Id};
-use crate::imp::{Imp, StmtBlock};
+use crate::imp::Imp;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -47,12 +47,6 @@ impl Converter {
     format!("{name}.{new_n}")
   }
 
-  pub fn convert_stmt_block(&mut self, code: StmtBlock, mut block: Rc<RefCell<Block>>) -> Rc<RefCell<Block>> {
-    for stmt in code {
-      block = self.convert_stmt(stmt, block);
-    }
-    block
-  }
 
   pub fn convert_stmt(&mut self, stmt: Imp, block: Rc<RefCell<Block>>) -> Rc<RefCell<Block>> {
     match stmt {
@@ -70,9 +64,16 @@ impl Converter {
       }
       Imp::IfElse { condition, true_case, false_case } => {
         // TODO: surely this is wrong since we're not using the condition expression
-        let t = self.convert_stmt_block(true_case, block.clone());
-        let e = self.convert_stmt_block(false_case, block);
+        let t = self.convert_stmt(*true_case, block.clone());
+        let e = self.convert_stmt(*false_case, block);
         self.make_sealed_block(&[t, e])
+      }
+      Imp::Block { stmts } => {
+        let mut block = block;
+        for stmt in stmts {
+          block = self.convert_stmt(stmt, block);
+        }
+        block
       }
       _ => todo!("Other statements still need to be done"),
     }
