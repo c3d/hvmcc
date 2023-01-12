@@ -64,13 +64,7 @@ impl Compile<Imp> for StmtKind {
     fn compile_target(target: &Vec<Located<ExprKind>>) -> PyResult<String> {
       // if vec has only 1 element, with only 1 variable
       // we can convert it into assert
-      if let [Located {
-        location: _,
-        node: ExprKind::Name { id, ctx: _ },
-        end_location: _,
-        custom: _,
-      }] = target.as_slice()
-      {
+      if let [Located { node: ExprKind::Name { id, ctx: _ }, .. }] = target.as_slice() {
         Ok(id.clone())
       }
       // otherwise, not supported.
@@ -176,10 +170,9 @@ impl Compile<Imp> for Vec<Stmt> {
   fn compile(&self) -> PyResult<Imp> {
     if self.is_empty() {
       Ok(Imp::Pass)
-    } else if let [stmt] = self.as_slice(){
+    } else if let [stmt] = self.as_slice() {
       Ok(stmt.compile()?)
-    }
-    else {
+    } else {
       let stmts = self.iter().map(|x| x.compile()).collect::<PyResult<Vec<Imp>>>()?;
       Ok(Imp::Block { stmts })
     }

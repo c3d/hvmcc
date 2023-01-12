@@ -1,10 +1,10 @@
-pub mod compiler;
+pub mod compile;
 
 use pyo3::prelude::*;
 use rustpython_parser::mode::Mode;
 use rustpython_parser::parser as pyparser;
 //use imp_hvm::compile_program;
-use compiler::Compile;
+use compile::Compile;
 //use hvm::Term;
 
 #[pyclass]
