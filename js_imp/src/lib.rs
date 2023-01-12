@@ -1,14 +1,21 @@
-pub fn add(left: usize, right: usize) -> usize {
-  left + right
-}
+mod compile;
+use compile::{Compile, JSResult};
+use imp_hvm::imp::Program as ImpProgram;
+use std::path::Path;
+use swc_common::SourceMap;
+use swc_ecma_parser::{parse_file_as_program, Syntax};
 
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn it_works() {
-    let result = add(2, 2);
-    assert_eq!(result, 4);
-  }
+pub fn js_to_imp(filename: &Path) -> JSResult<ImpProgram> {
+  let cm: SourceMap = Default::default();
+  let filem = cm.load_file(filename).expect("could not load file");
+  let prog = parse_file_as_program(
+    &filem,
+    Syntax::Es(Default::default()),
+    Default::default(),
+    None,
+    &mut vec![],
+  )
+  .expect("Could not parse program.");
+  let prog = prog.compile()?;
+  Ok(prog)
 }

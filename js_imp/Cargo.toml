@@ -6,3 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+swc_ecma_parser = "0.123.16"
+swc_ecma_ast = "0.95.11"
+swc_common = "0.29.27"
+imp_hvm = { path = "../imp_hvm" }
+clap = { version = "4.0.32", features = ["derive"] }
