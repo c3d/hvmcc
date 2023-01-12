@@ -35,7 +35,7 @@ impl Converter {
     n
   }
 
-  pub fn make_sealed_block(&mut self, preds: &[Rc<RefCell<Block>>]) -> Rc<RefCell<Block>> {
+  pub fn new_sealed_block(&mut self, preds: &[Rc<RefCell<Block>>]) -> Rc<RefCell<Block>> {
     let block = self.new_block(preds);
     self.ssa.seal_block(block.clone());
     block
@@ -51,6 +51,7 @@ impl Converter {
   pub fn convert_stmt(&mut self, stmt: Imp, crnt_block: Rc<RefCell<Block>>) -> Rc<RefCell<Block>> {
     match stmt {
       Imp::Block { stmts } => {
+        // TODO: how do I make things declared in the block have local scope
         let mut crnt_block = crnt_block;
         for stmt in stmts {
           crnt_block = self.convert_stmt(stmt, crnt_block);
@@ -76,26 +77,50 @@ impl Converter {
       Imp::MatchStmt { expr, cases, default } => todo!(),
       Imp::IfElse { condition, true_case, false_case } => {
         let condition = Imp::Expression { expr: condition };
-        let c_blk = self.make_sealed_block(&[crnt_block.clone()]);
-        let c_blk = self.convert_stmt(condition, c_blk);
+        let cond_blk = self.new_sealed_block(&[crnt_block.clone()]);
+        let cond_blk = self.convert_stmt(condition, cond_blk);
     
-        let t_blk = self.make_sealed_block(&[c_blk.clone()]);
+        let t_blk = self.new_sealed_block(&[cond_blk.clone()]);
         let t_blk = self.convert_stmt(*true_case, t_blk);
     
-        let e_blk = self.make_sealed_block(&[c_blk.clone()]);
-        let e_blk = self.convert_stmt(*false_case, e_blk);
+        let else_blk = self.new_sealed_block(&[cond_blk.clone()]);
+        let else_blk = self.convert_stmt(*false_case, else_blk);
         
-        self.make_sealed_block(&[t_blk, e_blk])
+        self.new_sealed_block(&[t_blk, else_blk])
       }
       Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
-        let i_blk = self.make_sealed_block(&[crnt_block.clone()]);
-        let i_blk = self.convert_stmt(*initialize, i_blk);
-        // how do i do this
-        let b_blk = todo!();
-        let a_blk = todo!();
-        let a_blk = self.convert_stmt(*afterthought, a_blk);
-        let e_blk = todo!();
-        self.make_sealed_block(&[b_blk, e_blk])
+        let init_blk = self.new_sealed_block(&[crnt_block]);
+        let init_blk = self.convert_stmt(*initialize, init_blk);
+
+        let cond_blk = self.new_block(&[init_blk]);
+        let condition = Imp::Expression { expr: condition };
+        let cond_blk = self.convert_stmt(condition, cond_blk);
+
+        let else_blk = self.new_sealed_block(&[cond_blk.clone()]);
+        let else_blk = self.convert_stmt(*else_case, else_blk);
+
+        let exit_blk = self.new_block(&[else_blk]);
+        
+        let after_blk = self.new_sealed_block(&[]);
+        let after_blk = self.convert_stmt(*afterthought, after_blk);
+
+        // TODO: we need to pass the blocks to break or continue
+        let body_blk = self.new_sealed_block(&[cond_blk.clone()]);
+        let body_blk = self.convert_stmt(*body, body_blk);
+
+        // Afterthought predecessors are the last body stmt and any continues
+        // TODO: does it bug if the last stmt in the body is a break?
+        { after_blk.borrow_mut().preds.push(body_blk); }
+        self.ssa.seal_block(after_blk.clone());
+
+        // Condition block predecessors are the initializer expression and the afterthought
+        { cond_blk.borrow_mut().preds.push(after_blk); }
+        self.ssa.seal_block(cond_blk);
+
+        // Exit predecessors are the else block and any breaks in the body
+        self.ssa.seal_block(exit_blk.clone());
+
+        exit_blk
       }
       _ => todo!("Other statements still need to be done"),
     }

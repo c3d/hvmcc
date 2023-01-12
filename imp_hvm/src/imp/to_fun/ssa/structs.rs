@@ -11,6 +11,25 @@ pub struct Phi {
   pub users: HashMap<Id, Rc<RefCell<Phi>>>,
 }
 
+impl Phi {
+  pub fn new(name: Id, block: Rc<RefCell<Block>>) -> Self {
+    Phi { name, block, operands: vec![], users: HashMap::new() }
+  }
+
+  pub fn add_operand(&mut self, op: Rc<Operand>) {
+    if let Operand::Phi { phi } = &*op {
+      self.users.insert(phi.borrow().name.clone(), phi.clone());
+    }
+    self.operands.push(op);
+  }
+
+  pub fn replace_by(&mut self, operand: Rc<Operand>) {
+    #[cfg(feature = "log")]
+    println!("Replace by! {self:?} {*operand:?}");
+  }
+}
+
+
 #[derive(Debug, Clone)]
 pub enum Operand {
   Phi { phi: Rc<RefCell<Phi>> },
@@ -32,24 +51,6 @@ pub enum Operand {
 pub struct CaseOp {
   pub matched: Rc<Operand>,
   pub body: Rc<Operand>,
-}
-
-impl Phi {
-  pub fn new(name: Id, block: Rc<RefCell<Block>>) -> Self {
-    Phi { name, block, operands: vec![], users: HashMap::new() }
-  }
-
-  pub fn add_operand(&mut self, op: Rc<Operand>) {
-    if let Operand::Phi { phi } = &*op {
-      self.users.insert(phi.borrow().name.clone(), phi.clone());
-    }
-    self.operands.push(op);
-  }
-
-  pub fn replace_by(&mut self, operand: Rc<Operand>) {
-    #[cfg(feature = "log")]
-    println!("Replace by! {self:?} {*operand:?}");
-  }
 }
 
 #[derive(Debug, Clone)]
