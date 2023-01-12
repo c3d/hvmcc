@@ -48,39 +48,54 @@ impl Converter {
   }
 
 
-  pub fn convert_stmt(&mut self, stmt: Imp, block: Rc<RefCell<Block>>) -> Rc<RefCell<Block>> {
+  pub fn convert_stmt(&mut self, stmt: Imp, crnt_block: Rc<RefCell<Block>>) -> Rc<RefCell<Block>> {
     match stmt {
+      Imp::Block { stmts } => {
+        let mut crnt_block = crnt_block;
+        for stmt in stmts {
+          crnt_block = self.convert_stmt(stmt, crnt_block);
+        }
+        crnt_block
+      }
       Imp::Assignment { name, expr } => {
         #[cfg(feature = "log")]
         println!("assign {expr}");
         let name_b = self.next_name(name.clone());
-        let expr_b = self.convert_expr(&expr, block.clone());
+        let expr_b = self.convert_expr(&expr, crnt_block.clone());
         {
-            block.borrow_mut().add_assignment(name_b.clone(), expr_b);
+          crnt_block.borrow_mut().add_assignment(name_b.clone(), expr_b);
         }
         let name_b = Rc::new(Operand::Var { name: name_b });
-        self.ssa.write_var(&name, block.clone(), name_b);
-        block
+        self.ssa.write_var(&name, crnt_block.clone(), name_b);
+        crnt_block
       }
+      Imp::Expression { expr } => {
+        // For now, expression statements don't do anything
+        crnt_block
+      }
+      Imp::MatchStmt { expr, cases, default } => todo!(),
       Imp::IfElse { condition, true_case, false_case } => {
-        let block = self.make_sealed_block(&[block.clone()]);
         let condition = Imp::Expression { expr: condition };
-        let c = self.convert_stmt(condition, block);
+        let c_blk = self.make_sealed_block(&[crnt_block.clone()]);
+        let c_blk = self.convert_stmt(condition, c_blk);
     
-        let c_s = self.make_sealed_block(&[c.clone()]);
-        let t = self.convert_stmt(*true_case, c_s);
+        let t_blk = self.make_sealed_block(&[c_blk.clone()]);
+        let t_blk = self.convert_stmt(*true_case, t_blk);
     
-        let c_s = self.make_sealed_block(&[c.clone()]);
-        let e = self.convert_stmt(*false_case, c_s);
+        let e_blk = self.make_sealed_block(&[c_blk.clone()]);
+        let e_blk = self.convert_stmt(*false_case, e_blk);
         
-        self.make_sealed_block(&[t, e])
+        self.make_sealed_block(&[t_blk, e_blk])
       }
-      Imp::Block { stmts } => {
-        let mut block = block;
-        for stmt in stmts {
-          block = self.convert_stmt(stmt, block);
-        }
-        block
+      Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
+        let i_blk = self.make_sealed_block(&[crnt_block.clone()]);
+        let i_blk = self.convert_stmt(*initialize, i_blk);
+        // how do i do this
+        let b_blk = todo!();
+        let a_blk = todo!();
+        let a_blk = self.convert_stmt(*afterthought, a_blk);
+        let e_blk = todo!();
+        self.make_sealed_block(&[b_blk, e_blk])
       }
       _ => todo!("Other statements still need to be done"),
     }
