@@ -6,8 +6,8 @@ use std::rc::Rc;
 
 pub struct BraunConverter {
   crnt_def: HashMap<Id, HashMap<u64, Rc<Operand>>>,
-  incomplete_phis: HashMap<u64, HashMap<Id, Rc<RefCell<Phi>>>>,
-  sealed_blocks: HashMap<u64, Rc<RefCell<Block>>>,
+  incomplete_phis: HashMap<u64, HashMap<Id, PhiRef>>,
+  sealed_blocks: HashMap<u64, BlockRef>,
 }
 
 impl BraunConverter {
@@ -19,7 +19,7 @@ impl BraunConverter {
     }
   }
 
-  pub fn write_var(&mut self, name: &Id, block: Rc<RefCell<Block>>, value: Rc<Operand>) {
+  pub fn write_var(&mut self, name: &Id, block: BlockRef, value: Rc<Operand>) {
     #[cfg(feature = "log")]
     println!("write_var {name} {block:?} {value:?}");
     if let Some(vals) = self.crnt_def.get_mut(name) {
@@ -30,7 +30,7 @@ impl BraunConverter {
     }
   }
 
-  pub fn read_var(&mut self, name: &Id, block: Rc<RefCell<Block>>) -> Rc<Operand> {
+  pub fn read_var(&mut self, name: &Id, block: BlockRef) -> Rc<Operand> {
     #[cfg(feature = "log")]
     println!("read_var {name} {block:?}");
     if let Some(vals) = self.crnt_def.get(name) {
@@ -45,7 +45,7 @@ impl BraunConverter {
 
   /// If a block currently contains no definition for a variable,
   /// we recursively look for a definition in its predecessors.
-  fn read_var_recursive(&mut self, name: &Id, block: Rc<RefCell<Block>>) -> Rc<Operand> {
+  fn read_var_recursive(&mut self, name: &Id, block: BlockRef) -> Rc<Operand> {
     let mut value: Rc<Operand>;
     let blk_id = { block.borrow().id };
     if !self.sealed_blocks.contains_key(&blk_id) {
@@ -155,21 +155,21 @@ impl BraunConverter {
   }
 
   /// We call a basic block sealed if no further predecessors will be added to the block.
-  pub fn seal_block(&mut self, block: Rc<RefCell<Block>>) {
+  pub fn seal_block(&mut self, block: BlockRef) {
+    // Add operands to every incomplete phi of this block, making them complete
     let blk_id = { block.borrow().id };
     let phis = if let Some(phis) = self.incomplete_phis.get(&blk_id) {
-      let phis: Vec<_> = phis.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-      Some(phis)
+      // This cloning is only to make the borrow checker happy
+      phis.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
     } else {
-      None
+      vec![]
     };
-    // This cloning, wrapping and unwrapping is only to make the borrow checker happy
-    if let Some(phis) = phis {
-      for (name, phi) in phis {
-        self.add_phi_operands(&name, phi.clone());
-      }
-      self.incomplete_phis.remove(&blk_id);
+    for (name, phi) in phis {
+      self.add_phi_operands(&name, phi.clone());
     }
+    self.incomplete_phis.remove(&blk_id);
+
+    // Seal the block
     self.sealed_blocks.insert(blk_id, block);
   }
 }

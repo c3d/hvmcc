@@ -1,5 +1,5 @@
 use super::braun::BraunConverter;
-use super::{Block, Operand};
+use super::*;
 use crate::fun::{Expr, Id};
 use crate::imp::Imp;
 use std::cell::RefCell;
@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 struct Converter {
   names: HashMap<Id, u64>,
-  blocks: Vec<Rc<RefCell<Block>>>,
+  blocks: Vec<BlockRef>,
   blk_count: u64,
   ssa: BraunConverter,
 }
@@ -23,7 +23,7 @@ impl Converter {
     }
   }
 
-  fn new_block(&mut self, preds: &[Rc<RefCell<Block>>]) -> Rc<RefCell<Block>> {
+  fn new_block(&mut self, preds: &[BlockRef]) -> BlockRef {
     let block = Rc::new(RefCell::new(Block::new(self.new_blk_id(), preds)));
     self.blocks.push(block.clone());
     block
@@ -35,7 +35,7 @@ impl Converter {
     n
   }
 
-  pub fn new_sealed_block(&mut self, preds: &[Rc<RefCell<Block>>]) -> Rc<RefCell<Block>> {
+  pub fn new_sealed_block(&mut self, preds: &[BlockRef]) -> BlockRef {
     let block = self.new_block(preds);
     self.ssa.seal_block(block.clone());
     block
@@ -48,7 +48,7 @@ impl Converter {
   }
 
 
-  pub fn convert_stmt(&mut self, stmt: Imp, crnt_block: Rc<RefCell<Block>>) -> Rc<RefCell<Block>> {
+  pub fn convert_stmt(&mut self, stmt: Imp, crnt_block: BlockRef) -> BlockRef {
     match stmt {
       Imp::Block { stmts } => {
         // TODO: how do I make things declared in the block have local scope
@@ -126,7 +126,7 @@ impl Converter {
     }
   }
 
-  pub fn convert_expr(&mut self, expr: &Expr, block: Rc<RefCell<Block>>) -> Rc<Operand> {
+  pub fn convert_expr(&mut self, expr: &Expr, block: BlockRef) -> Rc<Operand> {
     match expr {
       Expr::Var { name } => self.ssa.read_var(&name, block),
       Expr::Unsigned { numb } => Rc::new(Operand::Unsigned { numb: *numb }),

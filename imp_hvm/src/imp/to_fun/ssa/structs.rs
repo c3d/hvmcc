@@ -1,18 +1,21 @@
-use crate::fun::{Expr, Id, Oper};
+use crate::fun::{Id, Oper};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+pub type BlockRef = Rc<RefCell<Block>>;
+pub type PhiRef = Rc<RefCell<Phi>>;
+
 #[derive(Debug, Clone)]
 pub struct Phi {
   pub name: Id,
-  pub block: Rc<RefCell<Block>>,
+  pub block: BlockRef,
   pub operands: Vec<Rc<Operand>>,
-  pub users: HashMap<Id, Rc<RefCell<Phi>>>,
+  pub users: HashMap<Id, PhiRef>,
 }
 
 impl Phi {
-  pub fn new(name: Id, block: Rc<RefCell<Block>>) -> Self {
+  pub fn new(name: Id, block: BlockRef) -> Self {
     Phi { name, block, operands: vec![], users: HashMap::new() }
   }
 
@@ -32,7 +35,7 @@ impl Phi {
 
 #[derive(Debug, Clone)]
 pub enum Operand {
-  Phi { phi: Rc<RefCell<Phi>> },
+  Phi { phi: PhiRef },
   Undef,
   Unit,
   Ctr { name: Id, args: Vec<Rc<Operand>> }, // Datatype Haskell
@@ -56,12 +59,12 @@ pub struct CaseOp {
 #[derive(Debug, Clone)]
 pub struct Block {
   pub id: u64,
-  pub preds: Vec<Rc<RefCell<Block>>>,
+  pub preds: Vec<BlockRef>,
   pub assignments: Vec<(Id, Rc<Operand>)>,
 }
 
 impl Block {
-  pub fn new(id: u64, blocks: &[Rc<RefCell<Block>>]) -> Self {
+  pub fn new(id: u64, blocks: &[BlockRef]) -> Self {
     Block { id, preds: blocks.to_vec(), assignments: vec![] }
   }
 
