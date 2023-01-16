@@ -2,17 +2,15 @@ use super::braun::BraunConverter;
 use super::*;
 use crate::fun::{Expr, Id};
 use crate::imp::Imp;
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::process::exit;
 use std::rc::Rc;
 
-struct Converter {
+pub struct Converter {
   names: HashMap<Id, u64>,
   // TODO: This should be the only owner of the Blocks, use `Weak` in other places.
   // Right now we have memory leaks
-  blocks: Vec<BlockRef>,
+  pub blocks: Vec<BlockRef>,
   blk_count: u64,
   ssa: BraunConverter,
   scope_entry: Option<BlockRef>,

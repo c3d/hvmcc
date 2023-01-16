@@ -1,5 +1,5 @@
-use crate::CaseExpr;
 use crate::fun::{Expr, Id, Oper};
+use crate::CaseExpr;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -33,7 +33,6 @@ impl Phi {
   }
 }
 
-
 #[derive(Debug, Clone)]
 pub enum Operand {
   Unit,
@@ -55,13 +54,22 @@ impl From<Expr> for Rc<Operand> {
   fn from(value: Expr) -> Self {
     Rc::new(match value {
       Expr::App { expr, argm } => Operand::App { expr: expr.into(), argm: argm.into() },
-      Expr::BinOp { op, left, right } => Operand::BinOp { op, left: left.into(), right: right.into() },
-      Expr::Ctr { name, args } => Operand::Ctr { name, args: args.into_iter().map(|x| x.into()).collect() },
+      Expr::BinOp { op, left, right } => {
+        Operand::BinOp { op, left: left.into(), right: right.into() }
+      }
+      Expr::Ctr { name, args } => {
+        Operand::Ctr { name, args: args.into_iter().map(|x| x.into()).collect() }
+      }
       Expr::Float { numb } => Operand::Float { numb },
-      Expr::FunCall { name, args } => Operand::FunCall { name, args: args.into_iter().map(|x| x.into()).collect() },
+      Expr::FunCall { name, args } => {
+        Operand::FunCall { name, args: args.into_iter().map(|x| x.into()).collect() }
+      }
       Expr::Lambda { var, body } => Operand::Lambda { var, body: body.into() },
       Expr::Let { name, expr, body } => Operand::Let { name, expr: expr.into(), body: body.into() },
-      Expr::MatchExpr { scrutinee, cases } => Operand::MatchExpr { scrutinee: scrutinee.into(), cases: cases.into_iter().map(|x| x.into()).collect() },
+      Expr::MatchExpr { scrutinee, cases } => Operand::MatchExpr {
+        scrutinee: scrutinee.into(),
+        cases: cases.into_iter().map(|x| x.into()).collect(),
+      },
       Expr::Unit => Operand::Unit,
       Expr::Unsigned { numb } => Operand::Unsigned { numb },
       Expr::Var { name } => Operand::Var { name },
@@ -98,8 +106,8 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub enum BlockKind {
   Simple,
-  Match {cond: Rc<Operand>, cases: Vec<(Rc<Operand>, BlockRef)>, default: BlockRef},
-  Jump {dest: BlockRef},
+  Match { cond: Rc<Operand>, cases: Vec<(Rc<Operand>, BlockRef)>, default: BlockRef },
+  Jump { dest: BlockRef },
 }
 
 impl Block {

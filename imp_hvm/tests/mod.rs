@@ -2,11 +2,13 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 
+use imp_hvm::Procedure;
 use pretty_assertions::assert_eq;
 use walkdir::WalkDir;
 
 use imp_hvm::fun::to_hvm::compile_function;
-use imp_hvm::parser::{FuncProgramParser, FunctionParser};
+use imp_hvm::imp::Imp;
+use imp_hvm::parser::{FuncProgramParser, FunctionParser, ProgramParser};
 
 fn golden_test(path: &Path, run: &dyn Fn(&Path) -> String) {
   let result = run(path);
@@ -33,8 +35,8 @@ fn golden_test_dir(root: &Path, ext: &str, run: &dyn Fn(&Path) -> String) {
 #[test]
 fn test_fun_to_hvm() {
   let run = |path: &Path| {
-    let entry = fs::read_to_string(path).unwrap();
-    match FunctionParser::new().parse(&entry) {
+    let input = fs::read_to_string(path).unwrap();
+    match FunctionParser::new().parse(&input) {
       Ok(fun_ast) => match compile_function(fun_ast) {
         Ok(hvm_ast) => hvm_ast.to_string(),
         Err(err) => err.to_string(),
@@ -48,8 +50,8 @@ fn test_fun_to_hvm() {
 #[test]
 fn test_fun_eval() {
   let run = |path: &Path| {
-    let entry = fs::read_to_string(path).unwrap();
-    match FuncProgramParser::new().parse(&entry) {
+    let input = fs::read_to_string(path).unwrap();
+    match FuncProgramParser::new().parse(&input) {
       Ok(fprog) => {
         let imp_hvm::FuncProgram(funcs) = fprog;
         let mut env = imp_hvm::eval::Env::new();
@@ -69,4 +71,45 @@ fn test_fun_eval() {
     }
   };
   golden_test_dir(Path::new("./tests/fun_eval"), "hvmcc", &run);
+}
+
+#[test]
+fn test_imp_ssa() {
+  let run = |path: &Path| {
+    let input = fs::read_to_string(path).unwrap();
+    match ProgramParser::new().parse(&input) {
+      Ok(prog) => {
+        let body = Imp::Block { stmts: prog.0 };
+        let main = Procedure { name: "Main".into(), args: vec![], body };
+        let ssa = imp_hvm::imp::to_fun::ssa::procedure_to_ssa(main);
+        format!("{ssa:?}")
+      }
+      Err(err) => err.to_string(),
+    }
+  };
+  golden_test_dir(Path::new("./tests/imp_ssa"), "hvmcc", &run);
+}
+
+#[test]
+fn test_imp_parse() {
+  let run = |path: &Path| {
+    let input = fs::read_to_string(path).unwrap();
+    match ProgramParser::new().parse(&input) {
+      Ok(prog) => prog.to_string(),
+      Err(err) => err.to_string(),
+    }
+  };
+  golden_test_dir(Path::new("./tests/imp_parse"), "hvmcc", &run);
+}
+
+#[test]
+fn test_fun_parse() {
+  let run = |path: &Path| {
+    let input = fs::read_to_string(path).unwrap();
+    match FuncProgramParser::new().parse(&input) {
+      Ok(prog) => prog.to_string(),
+      Err(err) => err.to_string(),
+    }
+  };
+  golden_test_dir(Path::new("./tests/fun_parse"), "hvmcc", &run);
 }

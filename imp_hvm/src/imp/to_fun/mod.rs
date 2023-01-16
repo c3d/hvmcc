@@ -1,4 +1,4 @@
-mod ssa;
+pub mod ssa;
 
 use crate::fun::{Expr, Id};
 use crate::imp::{CaseStmt, Imp, Procedure};
@@ -33,7 +33,7 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>)
       hoist_proc_defs(body, proc_name, hoisted);
       hoist_proc_defs(else_case, proc_name, hoisted);
     }
-    Imp::Label {  stmt, .. } => {
+    Imp::Label { stmt, .. } => {
       hoist_proc_defs(stmt, proc_name, hoisted);
     }
     Imp::Block { stmts } => {
@@ -117,12 +117,10 @@ fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
       let diff: HashSet<Id> = vars.difference(&args).map(String::clone).collect();
       diff
     }
-    Imp::Block { stmts } => {
-      stmts
-        .iter()
-        .map(unbound_in_stmt)
-        .fold(HashSet::new(), |acc, val| acc.union(&val).map(String::clone).collect())       
-    } 
+    Imp::Block { stmts } => stmts
+      .iter()
+      .map(unbound_in_stmt)
+      .fold(HashSet::new(), |acc, val| acc.union(&val).map(String::clone).collect()),
     Imp::Continue | Imp::Break | Imp::Pass => HashSet::new(),
   }
 }

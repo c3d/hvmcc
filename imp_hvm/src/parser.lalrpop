@@ -4,7 +4,7 @@ use crate::imp::syntax::{CaseStmt, Imp, Procedure, Program};
 grammar;
 
 
-Program: Program =
+pub Program: Program =
     <Imp*> =>
         Program(<>);
 
