@@ -3,7 +3,7 @@ use crate::fun::{Expr, Id};
 #[derive(Clone, Debug)]
 pub enum Imp {
   Block {
-    stmts: Vec<Imp>
+    stmts: Vec<Imp>,
   },
   Assignment {
     name: Id,

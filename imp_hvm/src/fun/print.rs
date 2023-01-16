@@ -1,5 +1,5 @@
 use crate::imp::print::ind;
-use crate::{CaseExpr, Expr, Function, Rule, FuncProgram};
+use crate::{CaseExpr, Expr, FuncProgram, Function, Rule};
 use std::fmt;
 
 pub fn pprint_fun(fun: &Expr, depth: usize) -> String {

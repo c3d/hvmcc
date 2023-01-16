@@ -100,7 +100,8 @@ impl Converter {
         let dflt_blk = self.convert_stmt(*default, dflt_blk.clone());
 
         // The branching block with the expr to be matched
-        let blk_kind = BlockKind::Match { cond: expr.into(), cases: vec![], default: dflt_blk.clone() };
+        let blk_kind =
+          BlockKind::Match { cond: expr.into(), cases: vec![], default: dflt_blk.clone() };
         let match_blk = self.new_sealed_block(&[crnt_block], blk_kind);
 
         // Seal the default case
@@ -126,59 +127,67 @@ impl Converter {
 
         self.ssa.seal_block(exit_blk.clone());
         exit_blk
-      },
+      }
       Imp::IfElse { condition, true_case, false_case } => {
         // Else block is the default case, we create early to point to it in the match block
         let else_blk = self.new_block(&[], BlockKind::Simple);
         let else_blk = self.convert_stmt(*false_case, else_blk.clone());
 
         // If condition
-        let cond_kind = BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk.clone() };
+        let cond_kind =
+          BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk.clone() };
         let cond_blk = self.new_sealed_block(&[crnt_block], cond_kind);
 
         // Seal the else
         add_block_pred(else_blk.clone(), cond_blk.clone());
         self.ssa.seal_block(else_blk.clone());
-    
+
         // Then block (condition true)
         let then_blk = self.new_sealed_block(&[cond_blk.clone()], BlockKind::Simple);
         let then_blk = self.convert_stmt(*true_case, then_blk);
 
         {
           if let BlockKind::Match { cases, .. } = &mut (*cond_blk).borrow_mut().kind {
-            cases.push((Operand::Ctr { name: "True".to_string(), args: vec![] }.into(), then_blk.clone()));
-            cases.push((Operand::Ctr { name: "False".to_string(), args: vec![] }.into(), else_blk.clone()));
+            cases.push((
+              Operand::Ctr { name: "True".to_string(), args: vec![] }.into(),
+              then_blk.clone(),
+            ));
+            cases.push((
+              Operand::Ctr { name: "False".to_string(), args: vec![] }.into(),
+              else_blk.clone(),
+            ));
           } else {
             panic!("IfElse block is not a Match");
           }
         }
-        
+
         self.new_sealed_block(&[then_blk, else_blk], BlockKind::Simple)
       }
       Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
         // Init block, called once
         let init_blk = self.new_sealed_block(&[crnt_block], BlockKind::Simple);
         let init_blk = self.convert_stmt(*initialize, init_blk);
-        
+
         // Go to else on normal loop ending (no breaks)
         let else_blk = self.new_block(&[], BlockKind::Simple);
         let else_blk = self.convert_stmt(*else_case, else_blk.clone());
 
         // Loop block, with condition going to else or body
-        let loop_kind = BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk.clone() };
+        let loop_kind =
+          BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk.clone() };
         let loop_blk = self.new_block(&[init_blk], loop_kind);
-        
+
         // Seal else block
         add_block_pred(else_blk.clone(), loop_blk.clone());
         self.ssa.seal_block(else_blk.clone());
-        
+
         // Exit block that ties everything together
         let exit_blk = self.new_block(&[else_blk], BlockKind::Simple);
-    
+
         // Swap the entry and exit for break and continue inside the body
         let old_entry = std::mem::replace(&mut self.scope_entry, Some(loop_blk.clone()));
         let old_exit = std::mem::replace(&mut self.scope_exit, Some(exit_blk.clone()));
-        
+
         // Statement executed after one body iteration
         let after_blk = self.new_sealed_block(&[], BlockKind::Simple);
         let after_blk = self.convert_stmt(*afterthought, after_blk);
@@ -189,11 +198,11 @@ impl Converter {
 
         // Afterthought predecessors are the last body stmt and any continues
         // TODO: does it bug if the last stmt in the body is a break?
-        { (*after_blk).borrow_mut().preds.push(body_blk); }
+        add_block_pred(after_blk, body_blk);
         self.ssa.seal_block(after_blk.clone());
 
         // Condition block predecessors are the initializer expression and the afterthought
-        { (*loop_blk).borrow_mut().preds.push(after_blk); }
+        add_block_pred(loop_blk, after_blk);
         self.ssa.seal_block(loop_blk);
 
         // Exit predecessors are the else block and any breaks in the body
@@ -224,5 +233,7 @@ impl Converter {
 }
 
 fn add_block_pred(block: BlockRef, new_pred: BlockRef) {
-  { (*block).borrow_mut().preds.push(new_pred); }
+  {
+    (*block).borrow_mut().preds.push(new_pred);
+  }
 }

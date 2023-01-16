@@ -82,7 +82,7 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
       let begin = ind("begin", depth);
       let end = ind("end", depth);
       format!("{begin}\n{stmts}\n{end}")
-    },
+    }
   }
 }
 
