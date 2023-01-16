@@ -1,5 +1,5 @@
 use crate::imp::print::ind;
-use crate::{CaseExpr, Expr, Function, Rule};
+use crate::{CaseExpr, Expr, Function, Rule, FuncProgram};
 use std::fmt;
 
 pub fn pprint_fun(fun: &Expr, depth: usize) -> String {
@@ -78,5 +78,12 @@ impl fmt::Display for Function {
     let args = self.args.join("\n");
     let rules = self.rules.iter().map(Rule::to_string).collect::<Vec<String>>().join("\n");
     write!(f, "function {} ({}) {{\n{}\n}}", self.name, args, rules)
+  }
+}
+
+impl fmt::Display for FuncProgram {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let program = self.0.iter().map(Function::to_string).collect::<Vec<_>>().join("\n\n");
+    f.write_str(&program)
   }
 }
