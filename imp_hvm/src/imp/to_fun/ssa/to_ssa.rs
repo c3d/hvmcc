@@ -10,6 +10,8 @@ use std::rc::Rc;
 
 struct Converter {
   names: HashMap<Id, u64>,
+  // TODO: This should be the only owner of the Blocks, use `Weak` in other places.
+  // Right now we have memory leaks
   blocks: Vec<BlockRef>,
   blk_count: u64,
   ssa: BraunConverter,
