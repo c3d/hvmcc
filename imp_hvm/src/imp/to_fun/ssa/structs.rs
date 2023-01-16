@@ -1,4 +1,5 @@
-use crate::fun::{Id, Oper};
+use crate::CaseExpr;
+use crate::fun::{Expr, Id, Oper};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -35,8 +36,6 @@ impl Phi {
 
 #[derive(Debug, Clone)]
 pub enum Operand {
-  Phi { phi: PhiRef },
-  Undef,
   Unit,
   Ctr { name: Id, args: Vec<Rc<Operand>> }, // Datatype Haskell
   FunCall { name: Id, args: Vec<Rc<Operand>> }, // Function that pattern matches
@@ -48,6 +47,32 @@ pub enum Operand {
   BinOp { op: Oper, left: Rc<Operand>, right: Rc<Operand> },
   Lambda { var: Id, body: Rc<Operand> },
   MatchExpr { scrutinee: Rc<Operand>, cases: Vec<CaseOp> },
+  Phi { phi: PhiRef },
+  Undef,
+}
+
+impl From<Expr> for Rc<Operand> {
+  fn from(value: Expr) -> Self {
+    Rc::new(match value {
+      Expr::App { expr, argm } => Operand::App { expr: expr.into(), argm: argm.into() },
+      Expr::BinOp { op, left, right } => Operand::BinOp { op, left: left.into(), right: right.into() },
+      Expr::Ctr { name, args } => Operand::Ctr { name, args: args.into_iter().map(|x| x.into()).collect() },
+      Expr::Float { numb } => Operand::Float { numb },
+      Expr::FunCall { name, args } => Operand::FunCall { name, args: args.into_iter().map(|x| x.into()).collect() },
+      Expr::Lambda { var, body } => Operand::Lambda { var, body: body.into() },
+      Expr::Let { name, expr, body } => Operand::Let { name, expr: expr.into(), body: body.into() },
+      Expr::MatchExpr { scrutinee, cases } => Operand::MatchExpr { scrutinee: scrutinee.into(), cases: cases.into_iter().map(|x| x.into()).collect() },
+      Expr::Unit => Operand::Unit,
+      Expr::Unsigned { numb } => Operand::Unsigned { numb },
+      Expr::Var { name } => Operand::Var { name },
+    })
+  }
+}
+
+impl From<Box<Expr>> for Rc<Operand> {
+  fn from(value: Box<Expr>) -> Self {
+    (*value).into()
+  }
 }
 
 #[derive(Debug, Clone)]
@@ -56,16 +81,30 @@ pub struct CaseOp {
   pub body: Rc<Operand>,
 }
 
+impl From<CaseExpr> for CaseOp {
+  fn from(value: CaseExpr) -> Self {
+    CaseOp { matched: value.matched.into(), body: value.body.into() }
+  }
+}
+
 #[derive(Debug, Clone)]
 pub struct Block {
   pub id: u64,
   pub preds: Vec<BlockRef>,
   pub assignments: Vec<(Id, Rc<Operand>)>,
+  pub kind: BlockKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum BlockKind {
+  Simple,
+  Match {cond: Rc<Operand>, cases: Vec<(Rc<Operand>, BlockRef)>, default: BlockRef},
+  Jump {dest: BlockRef},
 }
 
 impl Block {
-  pub fn new(id: u64, blocks: &[BlockRef]) -> Self {
-    Block { id, preds: blocks.to_vec(), assignments: vec![] }
+  pub fn new(id: u64, preds: &[BlockRef], kind: BlockKind) -> Self {
+    Block { id, preds: preds.to_vec(), assignments: vec![], kind }
   }
 
   pub fn add_assignment(&mut self, name: Id, expr: Rc<Operand>) {
