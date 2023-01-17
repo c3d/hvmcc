@@ -198,11 +198,11 @@ impl Converter {
 
         // Afterthought predecessors are the last body stmt and any continues
         // TODO: does it bug if the last stmt in the body is a break?
-        add_block_pred(after_blk, body_blk);
+        add_block_pred(after_blk.clone(), body_blk);
         self.ssa.seal_block(after_blk.clone());
 
         // Condition block predecessors are the initializer expression and the afterthought
-        add_block_pred(loop_blk, after_blk);
+        add_block_pred(loop_blk.clone(), after_blk);
         self.ssa.seal_block(loop_blk);
 
         // Exit predecessors are the else block and any breaks in the body

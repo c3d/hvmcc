@@ -81,8 +81,8 @@ fn test_imp_ssa() {
       Ok(prog) => {
         let body = Imp::Block { stmts: prog.0 };
         let main = Procedure { name: "Main".into(), args: vec![], body };
-        let ssa = imp_hvm::imp::to_fun::ssa::procedure_to_ssa(main);
-        format!("{ssa:?}")
+        let (_, main) = imp_hvm::imp::to_fun::ssa::procedure_to_ssa(main);
+        format!("{main:?}")
       }
       Err(err) => err.to_string(),
     }
