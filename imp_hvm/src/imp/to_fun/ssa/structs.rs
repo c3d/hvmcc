@@ -4,27 +4,27 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-pub type BlockRef = Rc<RefCell<Block>>;
 pub type PhiRef = Rc<RefCell<Phi>>;
+pub type BlockId = usize;
 
 #[derive(Debug, Clone)]
 pub struct Phi {
   pub name: Id,
-  pub block: BlockRef,
-  pub operands: Vec<Rc<Operand>>,
+  pub blk_id: BlockId,
+  pub ops: Vec<Rc<Operand>>,
   pub users: HashMap<Id, PhiRef>,
 }
 
 impl Phi {
-  pub fn new(name: Id, block: BlockRef) -> Self {
-    Phi { name, block, operands: vec![], users: HashMap::new() }
+  pub fn new(name: Id, blk_id: BlockId) -> Self {
+    Phi { name, blk_id, ops: vec![], users: HashMap::new() }
   }
 
   pub fn add_operand(&mut self, op: Rc<Operand>) {
     if let Operand::Phi { phi } = &*op {
       self.users.insert(phi.borrow().name.clone(), phi.clone());
     }
-    self.operands.push(op);
+    self.ops.push(op);
   }
 
   pub fn replace_by(&mut self, operand: Rc<Operand>) {
@@ -97,8 +97,8 @@ impl From<CaseExpr> for CaseOp {
 
 #[derive(Debug, Clone)]
 pub struct Block {
-  pub id: u64,
-  pub preds: Vec<BlockRef>,
+  pub id: BlockId,
+  pub preds: Vec<BlockId>,
   pub assignments: Vec<(Id, Rc<Operand>)>,
   pub kind: BlockKind,
 }
@@ -106,12 +106,12 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub enum BlockKind {
   Simple,
-  Match { cond: Rc<Operand>, cases: Vec<(Rc<Operand>, BlockRef)>, default: BlockRef },
-  Jump { dest: BlockRef },
+  Match { cond: Rc<Operand>, cases: Vec<(Rc<Operand>, BlockId)>, default: BlockId },
+  Jump { dest: BlockId },
 }
 
 impl Block {
-  pub fn new(id: u64, preds: &[BlockRef], kind: BlockKind) -> Self {
+  pub fn new(id: BlockId, preds: Vec<BlockId>, kind: BlockKind) -> Self {
     Block { id, preds: preds.to_vec(), assignments: vec![], kind }
   }
 
