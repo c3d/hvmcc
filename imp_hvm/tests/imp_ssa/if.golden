@@ -1,0 +1,14 @@
+0
+[
+    Block { id: 0, preds: [5], assignments: [], kind: Simple },
+    Block { id: 1, preds: [], assignments: [("a.0", Unsigned { numb: 1 })], kind: Simple },
+    Block { id: 2, preds: [3], assignments: [("b.0", Unsigned { numb: 3 })], kind: Simple },
+    Block { id: 3, preds: [1], assignments: [], kind: Match {
+        cond: BinOp { op: Eql, left: Var { name: "a" }, right: Unsigned { numb: 1 } },
+        cases: [
+            (Ctr { name: "True", args: [] }, 4),
+            (Ctr { name: "False", args: [] }, 2)],
+            default: 2
+    } },
+    Block { id: 4, preds: [3], assignments: [("b.1", Unsigned { numb: 2 })], kind: Simple },
+    Block { id: 5, preds: [4, 2], assignments: [], kind: Simple }]

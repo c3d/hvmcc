@@ -1,0 +1,2 @@
+0
+[Block { id: 0, preds: [1], assignments: [], kind: Simple }, Block { id: 1, preds: [], assignments: [("x.0", Unsigned { numb: 2 })], kind: Simple }]
