@@ -35,9 +35,9 @@ impl Converter {
     self.proc_exit = Some(ret_block);
 
     let proc_block = self.ssa.new_sealed_block(vec![], BlockKind::Simple);
-    let proc_block = self.convert_stmt(proc.body, proc_block);
-
-    self.ssa.blocks[ret_block].preds.push(proc_block);
+    // TODO: Check that we don't leave any blocks hanging (proc without return)
+    let _ = self.convert_stmt(proc.body, proc_block);
+    
     self.ssa.seal_block(ret_block);
     ret_block
   }
@@ -77,7 +77,7 @@ impl Converter {
         let match_blk = self.ssa.new_sealed_block(vec![crnt_block], blk_kind);
 
         // Seal the default case
-        self.ssa.blocks[dflt_blk].preds.push(match_blk);
+        self.add_block_pred(dflt_blk, match_blk);
         self.ssa.seal_block(dflt_blk);
 
         // The exit block that ties the cases
@@ -94,7 +94,7 @@ impl Converter {
               panic!("Block in match stmt is not Match");
             }
           }
-          self.ssa.blocks[exit_blk].preds.push(case_blk);
+          self.add_block_pred(exit_blk, case_blk);
         }
 
         self.ssa.seal_block(exit_blk);
@@ -111,7 +111,7 @@ impl Converter {
         let cond_blk = self.ssa.new_sealed_block(vec![crnt_block], cond_kind);
 
         // Seal the else
-        self.ssa.blocks[else_blk].preds.push(cond_blk);
+        self.add_block_pred(else_blk, cond_blk);
         self.ssa.seal_block(else_blk);
 
         // Then block (condition true)
@@ -150,19 +150,21 @@ impl Converter {
         let loop_blk = self.ssa.new_block(vec![init_blk], loop_kind);
 
         // Seal else block
-        self.ssa.blocks[else_blk].preds.push(loop_blk);
+        self.add_block_pred(else_blk, loop_blk);
         self.ssa.seal_block(else_blk);
 
         // Exit block that ties everything together
         let exit_blk = self.ssa.new_block(vec![else_blk], BlockKind::Simple);
 
-        // Swap the entry and exit for break and continue inside the body
-        let old_entry = std::mem::replace(&mut self.scope_entry, Some(loop_blk));
-        let old_exit = std::mem::replace(&mut self.scope_exit, Some(exit_blk));
-
         // Statement executed after one body iteration
         let after_blk = self.ssa.new_sealed_block(vec![], BlockKind::Simple);
         let after_blk = self.convert_stmt(*afterthought, after_blk);
+
+        // Swap the entry and exit for break and continue inside the body
+        let old_entry = self.scope_entry;
+        let old_exit = self.scope_exit;
+        self.scope_entry = Some(after_blk);
+        self.scope_exit = Some(exit_blk);
 
         // The loop body itself
         let body_blk = self.ssa.new_sealed_block(vec![loop_blk], BlockKind::Simple);
@@ -170,11 +172,11 @@ impl Converter {
 
         // Afterthought predecessors are the last body stmt and any continues
         // TODO: does it bug if the last stmt in the body is a break?
-        self.ssa.blocks[after_blk].preds.push(body_blk);
+        self.add_block_pred(after_blk, body_blk);
         self.ssa.seal_block(after_blk);
 
         // Condition block predecessors are the initializer expression and the afterthought
-        self.ssa.blocks[loop_blk].preds.push(after_blk);
+        self.add_block_pred(loop_blk, after_blk);
         self.ssa.seal_block(loop_blk);
 
         // Exit predecessors are the else block and any breaks in the body
@@ -186,7 +188,81 @@ impl Converter {
 
         exit_blk
       }
-      _ => todo!("Other statements still need to be done"),
+      Imp::ForInElse { .. } => todo!("Ranged For is not yet supported"),
+      Imp::WhileElse { condition, body, else_case } => {
+        // Go to else on normal loop ending (no breaks)
+        let else_blk = self.ssa.new_block(vec![], BlockKind::Simple);
+        let else_blk = self.convert_stmt(*else_case, else_blk);
+
+        // Loop block, with condition going to else or body
+        let loop_kind =
+          BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk };
+        let loop_blk = self.ssa.new_block(vec![crnt_block], loop_kind);
+
+        // Seal else block
+        self.add_block_pred(else_blk, loop_blk);
+        self.ssa.seal_block(else_blk);
+
+        // Exit block that ties everything together
+        let exit_blk = self.ssa.new_block(vec![else_blk], BlockKind::Simple);
+
+        // Swap the entry and exit for break and continue inside the body
+        let old_entry = self.scope_entry;
+        let old_exit = self.scope_exit;
+        self.scope_entry = Some(loop_blk);
+        self.scope_exit = Some(exit_blk);
+
+        // The loop body itself
+        let body_blk = self.ssa.new_sealed_block(vec![loop_blk], BlockKind::Simple);
+        let body_blk = self.convert_stmt(*body, body_blk);
+
+        // Seal the loop block
+        self.add_block_pred(loop_blk, body_blk);
+        self.ssa.seal_block(loop_blk);
+
+        // Exit predecessors are the else block and any breaks in the body
+        self.ssa.seal_block(exit_blk);
+
+        // Restore the previous entry and exit after exiting the loop
+        self.scope_entry = old_entry;
+        self.scope_exit = old_exit;
+
+        exit_blk
+      }
+      Imp::Label { .. } => todo!("Labels are not yet supported"),
+      Imp::Return { value } => {
+        if let Some(proc_exit) = self.proc_exit {
+          let ret_kind = BlockKind::Return { dest: proc_exit, val: value.into() };
+          let ret_blk = self.ssa.new_sealed_block(vec![crnt_block], ret_kind);
+          self.add_block_pred(proc_exit, ret_blk);
+          ret_blk
+        } else {
+          panic!("Return found outside of procedure")
+        }
+      }
+      Imp::Goto { .. } => todo!("Gotos are not yet supported"),
+      Imp::ProcedureDef { .. } => todo!("Procedure definitions are not yet supported"),
+      Imp::Continue => {
+        if let Some(scope_entry) = self.scope_entry {
+          let cont_kind = BlockKind::Jump { dest: scope_entry };
+          let cont_block = self.ssa.new_sealed_block(vec![crnt_block], cont_kind);
+          self.add_block_pred(scope_entry, cont_block);
+          cont_block
+        } else {
+          panic!("Continue found outside of scoped block")
+        }
+      }
+      Imp::Break => {
+        if let Some(scope_exit) = self.scope_exit {
+          let break_kind = BlockKind::Jump { dest: scope_exit };
+          let break_block = self.ssa.new_sealed_block(vec![crnt_block], break_kind);
+          self.add_block_pred(scope_exit, break_block);
+          break_block
+        } else {
+          panic!("Break found outside of scoped block")
+        }
+      }
+      Imp::Pass => crnt_block,
     }
   }
 
@@ -201,5 +277,9 @@ impl Converter {
       }
       _ => todo!("Other expressions not covered yet"),
     }
+  }
+
+  fn add_block_pred(&mut self, blk_id: BlockId, pred_id: BlockId) {
+    self.ssa.blocks[blk_id].preds.push(pred_id);
   }
 }

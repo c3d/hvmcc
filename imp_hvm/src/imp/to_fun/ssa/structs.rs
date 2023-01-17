@@ -108,6 +108,7 @@ pub enum BlockKind {
   Simple,
   Match { cond: Rc<Operand>, cases: Vec<(Rc<Operand>, BlockId)>, default: BlockId },
   Jump { dest: BlockId },
+  Return { dest: BlockId, val: Rc<Operand> },
 }
 
 impl Block {
