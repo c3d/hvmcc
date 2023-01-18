@@ -1,5 +1,5 @@
 mod compile;
-use compile::{Compile, JSResult};
+use compile::{Compile, Ctx, JSResult};
 use imp_hvm::imp::Program as ImpProgram;
 use std::path::Path;
 use swc_common::SourceMap;
@@ -16,6 +16,6 @@ pub fn js_to_imp(filename: &Path) -> JSResult<ImpProgram> {
     &mut vec![],
   )
   .expect("Could not parse program.");
-  let prog = prog.compile()?;
+  let prog = prog.compile(&mut Ctx::new())?;
   Ok(prog)
 }

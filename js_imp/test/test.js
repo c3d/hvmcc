@@ -1,11 +1,23 @@
-var a = 2;
-var b = 3;
+class Foo {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+}
 
-for (var i = 0; i; i) {
-    if (true) {
-      return 5;
-    }
-    else {
-      return 4.5;
-    }
+class Bar {
+  constructor(z) {
+    this.z = z
+  }
+}
+
+var a = Bar(1)
+
+switch (true) {
+case a instanceof Bar && b instanceof Foo:
+  return 1
+case b instanceof Foo:
+  return 2
+case c instanceof Foo && a instanceof Bar:
+  return 3
 }
