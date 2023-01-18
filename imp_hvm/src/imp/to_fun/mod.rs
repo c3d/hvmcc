@@ -57,7 +57,7 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>)
   }
 }
 
-fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
+pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
   use crate::fun::to_hvm::get_unbound_vars as unbound_in_expr;
 
   match stmt {

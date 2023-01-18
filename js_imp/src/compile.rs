@@ -1,6 +1,6 @@
 use imp_hvm::fun::Expr as ImpExpr;
 use imp_hvm::imp::{Imp, Program as ImpProgram};
-use imp_hvm::CaseStmt;
+use imp_hvm::{to_fun::unbound_in_stmt, CaseStmt};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use swc_ecma_ast::{
@@ -20,7 +20,7 @@ pub enum JsErr {
 pub type JSResult<S> = Result<S, JsErr>;
 
 pub struct Ctx {
-  ctrs: HashMap<String, ImpExpr>, // ctrs
+  ctrs: HashMap<String, Vec<String>>, // ctrs
 }
 
 impl Ctx {
@@ -32,12 +32,10 @@ impl Ctx {
     Self::new()
   }
   fn add_ctr(&mut self, name: String, args: Vec<String>) {
-    let args = args.into_iter().map(|name| ImpExpr::Var { name }).collect();
-    let ctr = ImpExpr::Ctr { name: name.clone(), args };
-    self.ctrs.insert(name, ctr);
+    self.ctrs.insert(name, args);
   }
 
-  fn get_ctr(&self, name: &String) -> JSResult<&ImpExpr> {
+  fn get_ctr(&self, name: &String) -> JSResult<&Vec<String>> {
     self.ctrs.get(name).ok_or_else(|| JsErr::CtrNotDefined { name: name.clone() })
   }
 }
@@ -235,8 +233,9 @@ fn switch_to_destructuring_match(
           if let Some(binds) = is_valid_case(expr) {
             let mut bound_args = HashMap::new();
             for (var, ctr_name) in binds {
-              let ctr = ctx.get_ctr(&ctr_name)?;
-              bound_args.insert(var, ctr.clone());
+              let args = ctx.get_ctr(&ctr_name)?.iter().map(|x| ImpExpr::Var{name:format!("{var}.{x}")}).collect();
+              let ctr = ImpExpr::Ctr { name: ctr_name, args};
+              bound_args.insert(var, ctr);
             }
             let body = case.cons.compile(ctx)?;
             unfinished_cases.push(Case { binds: bound_args, body });
@@ -246,10 +245,15 @@ fn switch_to_destructuring_match(
         }
         // TODO: add default case
       }
-      // figure out with 
+      // figure out with
       let total_args = unfinished_cases
         .iter()
-        .flat_map(|Case { binds, .. }| binds.iter().map(|(name, _)| name.clone()))
+        .flat_map(|Case { binds, body }| {
+          binds
+            .iter()
+            .map(|(name, _)| name.clone())
+            .chain(unbound_in_stmt(body).into_iter())
+        })
         .collect::<HashSet<_>>();
       let mut match_cases = vec![];
       for Case { mut binds, body } in unfinished_cases.into_iter() {
