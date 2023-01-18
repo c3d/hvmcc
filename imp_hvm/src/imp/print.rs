@@ -8,7 +8,7 @@ pub fn ind(string: &str, n: usize) -> String {
 }
 
 // Converts a Vec<T> to a string by applying some mapping to each element, placing the results in separate lines
-fn vec_to_string<T>(elems: &Vec<T>, func: &dyn Fn(&T) -> String, sep: &str) -> String {
+fn vec_to_string<T>(elems: &[T], func: &dyn Fn(&T) -> String, sep: &str) -> String {
   elems.iter().map(func).collect::<Vec<String>>().join(sep)
 }
 
@@ -34,13 +34,14 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
       fn display_case(case: &CaseStmt, depth: usize) -> String {
         let CaseStmt { matched, body } = case;
         let matched = pprint_fun(matched, depth);
-        let b_block = pprint_imp(body, depth);
-        format!("{matched} => {b_block}",)
+        let b_block = pprint_imp(body, depth + 2);
+        format!("{matched} =>\n{b_block}",)
       }
       let cases = vec_to_string(cases, &|x| display_case(x, depth + 2), "\n");
       let imatch = ind("match", depth);
+      let ielse = ind("else", depth);
       let dflt_block = pprint_imp(default, depth + 2);
-      format!("{imatch} {expr} \n{cases}\nelse\n{dflt_block}\nend")
+      format!("{imatch} {expr} \n{cases}\n{ielse}\n{dflt_block}\nend")
     }
     Imp::IfElse { condition, true_case, false_case } => {
       let iif = ind("if", depth);
