@@ -41,7 +41,7 @@ fn pprint_imp(imp: &Imp, depth: usize) -> String {
       let imatch = ind("match", depth);
       let ielse = ind("else", depth);
       let dflt_block = pprint_imp(default, depth + 2);
-      format!("{imatch} {expr} \n{cases}\n{ielse}\n{dflt_block}\nend")
+      format!("{imatch} {expr} \n{cases}\n{ielse}\n{dflt_block}")
     }
     Imp::IfElse { condition, true_case, false_case } => {
       let iif = ind("if", depth);
