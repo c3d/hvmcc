@@ -1,3 +1,4 @@
+use imp_hvm::Oper;
 use imp_hvm::fun::Expr as ImpExpr;
 use imp_hvm::imp::{Imp, Program as ImpProgram};
 use imp_hvm::{to_fun::unbound_in_stmt, CaseStmt};
@@ -258,6 +259,8 @@ fn switch_to_destructuring_match(
       let mut match_cases = vec![];
       for Case { mut binds, body } in unfinished_cases.into_iter() {
         let mut args = vec![];
+        // the iteration order of the hashset is deterministic
+        // in the sense that it will be the same for every loop.
         for var in total_args.iter() {
           match binds.entry((*var).clone()) {
             Entry::Occupied(occ) => {
@@ -293,7 +296,32 @@ impl Compile<ImpExpr> for JsExpr {
       JsExpr::Fn(_) => todo!(),
       JsExpr::Unary(_) => todo!(),
       JsExpr::Update(_) => todo!(),
-      JsExpr::Bin(_) => todo!(),
+      JsExpr::Bin(BinExpr { op, left, right, .. }) => {
+        let left = Box::new(left.compile(ctx)?);
+        let right = Box::new(right.compile(ctx)?);
+        let op = match op {          
+          BinaryOp::EqEq | BinaryOp::EqEqEq => Oper::Eql, //should them not be the same?
+          BinaryOp::NotEq | BinaryOp::NotEqEq => Oper::Neq,
+          BinaryOp::Lt => Oper::Ltn,
+          BinaryOp::LtEq => Oper::Lte,
+          BinaryOp::Gt => Oper::Gtn,
+          BinaryOp::GtEq => Oper::Gte,
+          BinaryOp::LShift => Oper::Shl,
+          BinaryOp::RShift => Oper::Shr,
+          BinaryOp::Add => Oper::Add,
+          BinaryOp::Sub => Oper::Sub,
+          BinaryOp::Mul => Oper::Mul,
+          BinaryOp::Div => Oper::Div,
+          BinaryOp::Mod => Oper::Mod,
+          BinaryOp::BitOr => Oper::Or,
+          BinaryOp::BitXor => Oper::Xor,
+          BinaryOp::BitAnd => Oper::And,
+          BinaryOp::LogicalOr => Oper::Or,
+          BinaryOp::LogicalAnd => Oper::And,
+          _ => todo!()
+        };
+        Ok(ImpExpr::BinOp { op, left, right })
+      },
       JsExpr::Assign(_) => todo!(),
       JsExpr::Member(_) => todo!(),
       JsExpr::SuperProp(_) => todo!(),
@@ -398,7 +426,7 @@ impl Compile<ImpExpr> for ExprOrSpread {
 impl Compile<Imp> for Decl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
     match self {
-      Decl::Class(ClassDecl { ident, class, .. }) => {
+      Decl::Class(ClassDecl { ident, class, .. }) => {        
         let name = id_to_string(ident);
         let args = class.compile(ctx)?;
         println!("{name} {:?}", args);

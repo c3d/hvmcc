@@ -15,7 +15,7 @@ var a = Bar(1)
 
 switch (true) {
 case a instanceof Bar && b instanceof Foo:
-  return d
+  return (1 + d) * 3
 case b instanceof Foo:
   return e
 case c instanceof Foo && a instanceof Bar:
