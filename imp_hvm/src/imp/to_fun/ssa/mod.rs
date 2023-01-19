@@ -4,10 +4,11 @@ mod to_ssa;
 
 use crate::imp::Procedure;
 pub use structs::*;
-use to_ssa::Converter;
+pub use to_ssa::Converter;
 
-pub fn procedure_to_ssa(proc: Procedure) -> (Vec<self::Block>, self::BlockId) {
+pub fn procedure_to_ssa(proc: Procedure) -> Converter {
   let mut converter = Converter::new();
-  let res_blk = converter.convert_proc(proc);
-  (converter.ssa.blocks, res_blk)
+  // Block 0 is the exit and 1 the entry, so we don't need to get the return here
+  let _ = converter.convert_proc(proc);
+  converter
 }

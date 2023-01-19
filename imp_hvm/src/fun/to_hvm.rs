@@ -130,8 +130,8 @@ pub fn hoist_matches(expr: &mut fun::Expr, fn_name: &fun::Id, hoisted: &mut Vec<
       // Figure out which vars of the context need to be passed
       let mut ctx_names = HashSet::new();
       for case in cases.iter() {
-        let pat_vars = get_unbound_vars(&case.matched);
-        let body_vars = get_unbound_vars(&case.body);
+        let pat_vars = case.matched.get_unbound_vars();
+        let body_vars = case.body.get_unbound_vars();
         let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
         ctx_names.extend(diff);
       }
@@ -158,62 +158,6 @@ pub fn hoist_matches(expr: &mut fun::Expr, fn_name: &fun::Id, hoisted: &mut Vec<
       args.push(*scrutinee.clone());
       args.extend(ctx_vars);
       *expr = Expr::FunCall { name: aux_name, args };
-    }
-  }
-}
-
-/// Returns a set of variables that are not defined inside of the expression
-pub fn get_unbound_vars(expr: &fun::Expr) -> HashSet<fun::Id> {
-  use fun::Expr;
-  match expr {
-    Expr::Unit => HashSet::new(),
-    Expr::Ctr { args, .. } => {
-      let mut vars = HashSet::new();
-      for arg in args {
-        vars.extend(get_unbound_vars(arg));
-      }
-      vars
-    }
-    Expr::FunCall { args, .. } => {
-      let mut vars = HashSet::new();
-      for arg in args {
-        vars.extend(get_unbound_vars(arg));
-      }
-      vars
-    }
-    Expr::Let { name, expr, body } => {
-      let mut vars = get_unbound_vars(body);
-      vars.remove(name); // The variable defined by the let is not unbound in its body
-      vars.extend(get_unbound_vars(expr));
-      vars
-    }
-    Expr::App { expr, argm } => {
-      let mut vars = get_unbound_vars(expr);
-      vars.extend(get_unbound_vars(argm).into_iter());
-      vars
-    }
-    Expr::Var { name } => HashSet::from([name.clone()]),
-    Expr::Unsigned { .. } => HashSet::new(),
-    Expr::Float { .. } => HashSet::new(),
-    Expr::BinOp { left, right, .. } => {
-      let mut vars = get_unbound_vars(left);
-      vars.extend(get_unbound_vars(right).into_iter());
-      vars
-    }
-    Expr::Lambda { var, body } => {
-      let mut vars = get_unbound_vars(body);
-      vars.remove(var);
-      vars
-    }
-    Expr::MatchExpr { scrutinee, cases } => {
-      let mut vars = get_unbound_vars(scrutinee);
-      for case in cases {
-        let pat_vars = get_unbound_vars(&case.matched);
-        let body_vars = get_unbound_vars(&case.body);
-        let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
-        vars.extend(diff);
-      }
-      vars
     }
   }
 }

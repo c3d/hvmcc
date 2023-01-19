@@ -1,14 +1,26 @@
 pub mod ssa;
+mod ssa_to_fun;
 
-use crate::fun::{Expr, Id};
-use crate::imp::{CaseStmt, Imp, Procedure};
+use crate::fun::{FuncProgram, Id};
+use crate::imp::{CaseStmt, Imp, Procedure, Program};
 use std::collections::HashSet;
 
-pub fn imp_to_fun(_imperative: Imp) -> Expr {
-  todo!()
+pub fn imp_to_fun(imperative: Program) -> FuncProgram {
+  let mut main_body = Imp::Block { stmts: imperative.0 };
+  let mut hoisted = Vec::new();
+  hoist_proc_defs(&mut main_body, "Main", &mut hoisted);
+  let main = Procedure { name: "Main".into(), args: vec![], body: main_body };
+  hoisted.push(main);
+  let mut program = FuncProgram(vec![]);
+  for proc in hoisted {
+    let conv = ssa::procedure_to_ssa(proc);
+    let funs = ssa_to_fun::ssa_proc_to_fun(conv);
+    program.0.extend(funs.0);
+  }
+  program
 }
 
-fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>) {
+fn hoist_proc_defs(proc: &mut Imp, proc_name: &str, hoisted: &mut Vec<Procedure>) {
   match proc {
     Imp::Assignment { .. }
     | Imp::Expression { .. }
@@ -57,20 +69,18 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &Id, hoisted: &mut Vec<Procedure>)
   }
 }
 
-pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
-  use crate::fun::to_hvm::get_unbound_vars as unbound_in_expr;
-
+fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
   match stmt {
     Imp::Assignment { name, expr } => {
-      let mut unbound_vars = unbound_in_expr(expr);
+      let mut unbound_vars = expr.get_unbound_vars();
       unbound_vars.remove(name);
       unbound_vars
     }
-    Imp::Expression { expr } => unbound_in_expr(expr),
+    Imp::Expression { expr } => expr.get_unbound_vars(),
     Imp::MatchStmt { expr, cases, default } => {
-      let mut vars = unbound_in_expr(expr);
+      let mut vars = expr.get_unbound_vars();
       for CaseStmt { matched, body } in cases {
-        let pat_vars = unbound_in_expr(matched);
+        let pat_vars = matched.get_unbound_vars();
         let body_vars = unbound_in_stmt(body);
         let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
         vars.extend(diff);
@@ -79,28 +89,28 @@ pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
       vars
     }
     Imp::IfElse { condition, true_case, false_case } => {
-      let mut vars = unbound_in_expr(condition);
+      let mut vars = condition.get_unbound_vars();
       vars.extend(unbound_in_stmt(true_case));
       vars.extend(unbound_in_stmt(false_case));
       vars
     }
     Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
       let mut vars = unbound_in_stmt(initialize);
-      vars.extend(unbound_in_expr(condition));
+      vars.extend(condition.get_unbound_vars());
       vars.extend(unbound_in_stmt(afterthought));
       vars.extend(unbound_in_stmt(body));
       vars.extend(unbound_in_stmt(else_case));
       vars
     }
     Imp::ForInElse { target, iterator, body, else_case } => {
-      let mut vars = unbound_in_expr(iterator);
+      let mut vars = iterator.get_unbound_vars();
       vars.extend(unbound_in_stmt(body));
       vars.extend(unbound_in_stmt(else_case));
       vars.remove(target);
       vars
     }
     Imp::WhileElse { condition, body, else_case } => {
-      let mut vars = unbound_in_expr(condition);
+      let mut vars = condition.get_unbound_vars();
       vars.extend(unbound_in_stmt(body));
       vars.extend(unbound_in_stmt(else_case));
       vars
@@ -109,7 +119,7 @@ pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
     Imp::Label { stmt, .. } => unbound_in_stmt(stmt),
     // neither is goto
     Imp::Goto { .. } => HashSet::new(),
-    Imp::Return { value } => unbound_in_expr(value),
+    Imp::Return { value } => value.get_unbound_vars(),
     // procedure name is not a variable
     Imp::ProcedureDef { args, body, .. } => {
       let vars = unbound_in_stmt(body);

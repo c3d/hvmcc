@@ -1,2 +1,73 @@
-0
-[Block { id: 0, preds: [2], assignments: [], kind: Simple }, Block { id: 1, preds: [], assignments: [("x.0", Unsigned { numb: 2 })], kind: Simple }, Block { id: 2, preds: [1], assignments: [], kind: Return { dest: 0, val: Var { name: "x" } } }]
+Converter {
+    proc_name: "Main",
+    ssa: BraunConverter {
+        blocks: [
+            Block {
+                id: 0,
+                preds: [
+                    2,
+                ],
+                assignments: [],
+            },
+            Block {
+                id: 1,
+                preds: [],
+                assignments: [
+                    (
+                        "x.0",
+                        Unsigned {
+                            numb: 2,
+                        },
+                    ),
+                ],
+            },
+            Block {
+                id: 2,
+                preds: [
+                    1,
+                ],
+                assignments: [],
+            },
+        ],
+        crnt_def: {
+            2: {
+                "x": Var {
+                    name: "x.0",
+                },
+            },
+            1: {
+                "x": Var {
+                    name: "x.0",
+                },
+            },
+        },
+        incomplete_phis: {},
+        sealed_blocks: {
+            2,
+            0,
+            1,
+        },
+        blk_count: 3,
+    },
+    proc_entry: Some(
+        1,
+    ),
+    proc_exit: Some(
+        0,
+    ),
+    blk_kinds: [
+        Simple,
+        Simple,
+        Return {
+            dest: 0,
+            val: Var {
+                name: "x.0",
+            },
+        },
+    ],
+    names: {
+        "x": 0,
+    },
+    scope_entry: None,
+    scope_exit: None,
+}

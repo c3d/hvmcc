@@ -1,44 +1,45 @@
 use super::*;
-use crate::fun::Id;
+use crate::fun::{Expr, Id};
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
+#[derive(Debug)]
 pub struct BraunConverter {
-  crnt_def: HashMap<Id, HashMap<BlockId, Rc<Operand>>>,
+  pub blocks: Vec<Block>,
+  crnt_def: HashMap<BlockId, HashMap<Id, Rc<Operand>>>,
   incomplete_phis: HashMap<BlockId, HashMap<Id, PhiRef>>,
   sealed_blocks: HashSet<BlockId>,
-  pub blocks: Vec<Block>,
   blk_count: BlockId,
 }
 
 impl BraunConverter {
   pub fn new() -> Self {
     BraunConverter {
+      blocks: Vec::new(),
       crnt_def: HashMap::new(),
       incomplete_phis: HashMap::new(),
       sealed_blocks: HashSet::new(),
-      blocks: Vec::new(),
       blk_count: 0,
     }
   }
 
-  pub fn write_var(&mut self, name: &Id, blk_id: BlockId, value: Rc<Operand>) {
+  pub fn write_var(&mut self, name: Id, blk_id: BlockId, value: Rc<Operand>) {
     #[cfg(feature = "log")]
     println!("write_var {name} {block:?} {value:?}");
-    if let Some(vals) = self.crnt_def.get_mut(name) {
-      vals.insert(blk_id, value);
+    if let Some(vals) = self.crnt_def.get_mut(&blk_id) {
+      vals.insert(name, value);
     } else {
-      let vals = HashMap::from([(blk_id, value)]);
-      self.crnt_def.insert(name.clone(), vals);
+      let vals = HashMap::from([(name, value)]);
+      self.crnt_def.insert(blk_id, vals);
     }
   }
 
   pub fn read_var(&mut self, name: &Id, blk_id: BlockId) -> Rc<Operand> {
     #[cfg(feature = "log")]
     println!("read_var {name} {block:?}");
-    if let Some(vals) = self.crnt_def.get(name) {
-      if let Some(val) = vals.get(&blk_id) {
+    if let Some(vals) = self.crnt_def.get(&blk_id) {
+      if let Some(val) = vals.get(name) {
         // Local value numbering
         return val.clone();
       }
@@ -83,11 +84,11 @@ impl BraunConverter {
         // Then, we determine the φ function’s operands.
         // If a recursive look-up arrives back at the block,
         // this φ function will provide a definition and the recursion will end.
-        self.write_var(name, blk_id, value);
+        self.write_var(name.clone(), blk_id, value);
         value = self.add_phi_operands(name, phi);
       }
     }
-    self.write_var(name, blk_id, value.clone());
+    self.write_var(name.clone(), blk_id, value.clone());
     value
   }
 
@@ -173,9 +174,9 @@ impl BraunConverter {
     self.sealed_blocks.insert(blk_id);
   }
 
-  pub fn new_block(&mut self, preds: Vec<BlockId>, kind: BlockKind) -> BlockId {
+  pub fn new_block(&mut self, preds: Vec<BlockId>) -> BlockId {
     let id = self.new_blk_id();
-    let block = Block::new(id, preds, kind);
+    let block = Block::new(id, preds);
     self.blocks.push(block);
     id
   }
@@ -186,9 +187,22 @@ impl BraunConverter {
     n
   }
 
-  pub fn new_sealed_block(&mut self, preds: Vec<BlockId>, kind: BlockKind) -> BlockId {
-    let blk_id = self.new_block(preds, kind);
+  pub fn new_sealed_block(&mut self, preds: Vec<BlockId>) -> BlockId {
+    let blk_id = self.new_block(preds);
     self.seal_block(blk_id);
     blk_id
+  }
+
+  pub fn convert_expr(&mut self, expr: &Expr, blk_id: BlockId) -> Rc<Operand> {
+    match expr {
+      Expr::Var { name } => self.read_var(&name, blk_id),
+      Expr::Unsigned { numb } => Rc::new(Operand::Unsigned { numb: *numb }),
+      Expr::BinOp { op, left, right } => {
+        let left = self.convert_expr(left, blk_id);
+        let right = self.convert_expr(right, blk_id);
+        Rc::new(Operand::BinOp { op: *op, left, right })
+      }
+      _ => todo!("Other expressions not covered yet"),
+    }
   }
 }

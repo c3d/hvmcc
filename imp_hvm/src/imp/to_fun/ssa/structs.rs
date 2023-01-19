@@ -48,11 +48,12 @@ pub enum Operand {
   MatchExpr { scrutinee: Rc<Operand>, cases: Vec<CaseOp> },
   Phi { phi: PhiRef },
   Undef,
+  Parameter, // If a variable is the parameter of a match
 }
 
 impl From<Expr> for Rc<Operand> {
   fn from(value: Expr) -> Self {
-    Rc::new(match value {
+    match value {
       Expr::App { expr, argm } => Operand::App { expr: expr.into(), argm: argm.into() },
       Expr::BinOp { op, left, right } => {
         Operand::BinOp { op, left: left.into(), right: right.into() }
@@ -73,7 +74,7 @@ impl From<Expr> for Rc<Operand> {
       Expr::Unit => Operand::Unit,
       Expr::Unsigned { numb } => Operand::Unsigned { numb },
       Expr::Var { name } => Operand::Var { name },
-    })
+    }.into()
   }
 }
 
@@ -100,7 +101,6 @@ pub struct Block {
   pub id: BlockId,
   pub preds: Vec<BlockId>,
   pub assignments: Vec<(Id, Rc<Operand>)>,
-  pub kind: BlockKind,
 }
 
 #[derive(Debug, Clone)]
@@ -112,8 +112,8 @@ pub enum BlockKind {
 }
 
 impl Block {
-  pub fn new(id: BlockId, preds: Vec<BlockId>, kind: BlockKind) -> Self {
-    Block { id, preds: preds.to_vec(), assignments: vec![], kind }
+  pub fn new(id: BlockId, preds: Vec<BlockId>) -> Self {
+    Block { id, preds: preds.to_vec(), assignments: vec![] }
   }
 
   pub fn add_assignment(&mut self, name: Id, expr: Rc<Operand>) {

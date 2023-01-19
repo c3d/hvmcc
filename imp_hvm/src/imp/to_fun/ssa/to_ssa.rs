@@ -1,26 +1,33 @@
 use super::braun::BraunConverter;
 use super::*;
-use crate::fun::{Expr, Id};
+use crate::fun::Id;
 use crate::imp::Imp;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+#[derive(Debug)]
 pub struct Converter {
-  names: HashMap<Id, u64>,
+  pub proc_name: String,
   pub ssa: BraunConverter,
+  pub proc_entry: Option<BlockId>,
+  pub proc_exit: Option<BlockId>,
+  pub blk_kinds: Vec<BlockKind>, // separate from ssa blocks to avoid double borrow
+  names: HashMap<Id, u64>,
   scope_entry: Option<BlockId>,
   scope_exit: Option<BlockId>,
-  proc_exit: Option<BlockId>,
 }
 
 impl Converter {
   pub fn new() -> Self {
     Converter {
-      names: HashMap::new(),
+      proc_name: String::new(),
       ssa: BraunConverter::new(),
+      proc_entry: None,
+      proc_exit: None,
+      blk_kinds: Vec::new(),
+      names: HashMap::new(),
       scope_entry: None,
       scope_exit: None,
-      proc_exit: None,
     }
   }
 
@@ -30,19 +37,26 @@ impl Converter {
     format!("{name}.{new_n}")
   }
 
-  pub fn convert_proc(&mut self, proc: Procedure) -> BlockId {
-    let ret_block = self.ssa.new_block(vec![], BlockKind::Simple);
-    self.proc_exit = Some(ret_block);
+  pub fn convert_proc(&mut self, proc: Procedure) {
+    self.proc_name = proc.name;
+    // Create process exit
+    let proc_exit = self.ssa.new_block(vec![]);
+    self.blk_kinds.push(BlockKind::Simple);
+    self.proc_exit = Some(proc_exit);
 
-    let proc_block = self.ssa.new_sealed_block(vec![], BlockKind::Simple);
-    // TODO: Check that we don't leave any blocks hanging (proc without return)
-    let _ = self.convert_stmt(proc.body, proc_block);
+    // Create process entry
+    let proc_entry = self.ssa.new_sealed_block(vec![]);
+    self.blk_kinds.push(BlockKind::Simple);
+    self.proc_entry = Some(proc_entry);
     
-    self.ssa.seal_block(ret_block);
-    ret_block
+    // Convert process body
+    // TODO: Check that we don't leave any blocks hanging (proc without return)
+    let _ = self.convert_stmt(proc.body, proc_entry);
+    
+    self.ssa.seal_block(proc_exit);
   }
 
-  pub fn convert_stmt(&mut self, stmt: Imp, crnt_block: BlockId) -> BlockId {
+  fn convert_stmt(&mut self, stmt: Imp, crnt_block: BlockId) -> BlockId {
     match stmt {
       Imp::Block { stmts } => {
         // TODO: how do I make things declared in the block have local scope
@@ -55,11 +69,11 @@ impl Converter {
       Imp::Assignment { name, expr } => {
         #[cfg(feature = "log")]
         println!("assign {expr}");
-        let name_b = self.next_name(name.clone());
-        let expr_b = self.convert_expr(&expr, crnt_block);
-        self.ssa.blocks[crnt_block].add_assignment(name_b.clone(), expr_b);
-        let name_b = Rc::new(Operand::Var { name: name_b });
-        self.ssa.write_var(&name, crnt_block, name_b);
+        let next_name = self.next_name(name.clone());
+        let expr_b = self.ssa.convert_expr(&expr, crnt_block);
+        self.ssa.blocks[crnt_block].add_assignment(next_name.clone(), expr_b);
+        let var = Rc::new(Operand::Var { name: next_name });
+        self.ssa.write_var(name, crnt_block, var);
         crnt_block
       }
       Imp::Expression { .. } => {
@@ -68,33 +82,43 @@ impl Converter {
       }
       Imp::MatchStmt { expr, cases, default } => {
         // Default case is obligatory and separate in the AST
-        let dflt_blk = self.ssa.new_sealed_block(vec![], BlockKind::Simple);
+        let dflt_blk = self.ssa.new_sealed_block(vec![]);
         let dflt_blk = self.convert_stmt(*default, dflt_blk);
+        self.blk_kinds.push(BlockKind::Simple);
 
         // The branching block with the expr to be matched
-        let blk_kind =
-          BlockKind::Match { cond: expr.into(), cases: vec![], default: dflt_blk };
-        let match_blk = self.ssa.new_sealed_block(vec![crnt_block], blk_kind);
+        let match_blk = self.ssa.new_sealed_block(vec![crnt_block]);
+        let cond = self.ssa.convert_expr(&expr, match_blk);
+        // Replace kind after creation cause we need the block before to insert phis
+        let blk_kind = BlockKind::Match { cond, cases: vec![], default: dflt_blk };
+        self.blk_kinds.push(blk_kind);
 
         // Seal the default case
         self.add_block_pred(dflt_blk, match_blk);
         self.ssa.seal_block(dflt_blk);
 
         // The exit block that ties the cases
-        let exit_blk = self.ssa.new_block(vec![dflt_blk], BlockKind::Simple);
+        let exit_blk = self.ssa.new_block(vec![dflt_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
 
         // Convert each of the cases and point to the exit
         for case in cases {
-          let case_blk = self.ssa.new_sealed_block(vec![match_blk], BlockKind::Simple);
-          let case_blk = self.convert_stmt(case.body, case_blk);
-          {
-            if let BlockKind::Match { cases, .. } = &mut self.ssa.blocks[match_blk].kind {
-              cases.push((case.matched.into(), case_blk));
-            } else {
-              panic!("Block in match stmt is not Match");
-            }
+          // Create entry block for this case
+          let case_entry_blk = self.ssa.new_sealed_block(vec![match_blk]);
+          self.blk_kinds.push(BlockKind::Simple);
+          // Add assignments to all lhs variables
+          for var in case.matched.get_unbound_vars() {
+            self.ssa.blocks[case_entry_blk].add_assignment(var, Operand::Parameter.into());
           }
-          self.add_block_pred(exit_blk, case_blk);
+          // Convert case body
+          let case_exit_blk = self.convert_stmt(case.body, case_entry_blk);
+          if let BlockKind::Match { cases, .. } = &mut self.blk_kinds[match_blk] {
+            let pattern = case.matched.into();  // Not doing a convert_expr here since we know we only got param assignments
+            cases.push((pattern, case_exit_blk));
+          } else {
+            panic!("Block in match stmt is not Match");
+          }
+          self.add_block_pred(exit_blk, case_exit_blk);
         }
 
         self.ssa.seal_block(exit_blk);
@@ -102,62 +126,68 @@ impl Converter {
       }
       Imp::IfElse { condition, true_case, false_case } => {
         // Else block is the default case, we create early to point to it in the match block
-        let else_blk = self.ssa.new_block(vec![], BlockKind::Simple);
+        let else_blk = self.ssa.new_block(vec![]);
+        self.blk_kinds.push(BlockKind::Simple);
         let else_blk = self.convert_stmt(*false_case, else_blk);
 
         // If condition
-        let cond_kind =
-          BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk };
-        let cond_blk = self.ssa.new_sealed_block(vec![crnt_block], cond_kind);
+        let cond_blk = self.ssa.new_sealed_block(vec![crnt_block]);
+        let cond = self.ssa.convert_expr(&condition, cond_blk);
+        self.blk_kinds.push(BlockKind::Match { cond, cases: vec![], default: else_blk });
 
         // Seal the else
         self.add_block_pred(else_blk, cond_blk);
         self.ssa.seal_block(else_blk);
 
         // Then block (condition true)
-        let then_blk = self.ssa.new_sealed_block(vec![cond_blk], BlockKind::Simple);
+        let then_blk = self.ssa.new_sealed_block(vec![cond_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
         let then_blk = self.convert_stmt(*true_case, then_blk);
 
-        {
-          if let BlockKind::Match { cases, .. } = &mut self.ssa.blocks[cond_blk].kind {
-            cases.push((
-              Operand::Ctr { name: "True".to_string(), args: vec![] }.into(),
-              then_blk,
-            ));
-            cases.push((
-              Operand::Ctr { name: "False".to_string(), args: vec![] }.into(),
-              else_blk,
-            ));
-          } else {
-            panic!("IfElse block is not a Match");
-          }
+        if let BlockKind::Match { cases, .. } = &mut self.blk_kinds[cond_blk] {
+          cases.push((
+            Operand::Ctr { name: "True".to_string(), args: vec![] }.into(),
+            then_blk,
+          ));
+          cases.push((
+            Operand::Ctr { name: "False".to_string(), args: vec![] }.into(),
+            else_blk,
+          ));
+        } else {
+          panic!("If Else block is not a Match");
         }
 
-        self.ssa.new_sealed_block(vec![then_blk, else_blk], BlockKind::Simple)
+        let exit_blk = self.ssa.new_sealed_block(vec![then_blk, else_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
+        exit_blk
       }
       Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
         // Init block, called once
-        let init_blk = self.ssa.new_sealed_block(vec![crnt_block], BlockKind::Simple);
+        let init_blk = self.ssa.new_sealed_block(vec![crnt_block]);
+        self.blk_kinds.push(BlockKind::Simple);
         let init_blk = self.convert_stmt(*initialize, init_blk);
 
         // Go to else on normal loop ending (no breaks)
-        let else_blk = self.ssa.new_block(vec![], BlockKind::Simple);
+        let else_blk = self.ssa.new_block(vec![]);
+        self.blk_kinds.push(BlockKind::Simple);
         let else_blk = self.convert_stmt(*else_case, else_blk);
 
         // Loop block, with condition going to else or body
-        let loop_kind =
-          BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk };
-        let loop_blk = self.ssa.new_block(vec![init_blk], loop_kind);
+        let loop_blk = self.ssa.new_block(vec![init_blk]);
+        let cond = self.ssa.convert_expr(&condition, loop_blk);
+        self.blk_kinds.push(BlockKind::Match { cond, cases: vec![], default: else_blk });
 
         // Seal else block
         self.add_block_pred(else_blk, loop_blk);
         self.ssa.seal_block(else_blk);
 
         // Exit block that ties everything together
-        let exit_blk = self.ssa.new_block(vec![else_blk], BlockKind::Simple);
+        let exit_blk = self.ssa.new_block(vec![else_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
 
         // Statement executed after one body iteration
-        let after_blk = self.ssa.new_sealed_block(vec![], BlockKind::Simple);
+        let after_blk = self.ssa.new_sealed_block(vec![]);
+        self.blk_kinds.push(BlockKind::Simple);
         let after_blk = self.convert_stmt(*afterthought, after_blk);
 
         // Swap the entry and exit for break and continue inside the body
@@ -167,7 +197,8 @@ impl Converter {
         self.scope_exit = Some(exit_blk);
 
         // The loop body itself
-        let body_blk = self.ssa.new_sealed_block(vec![loop_blk], BlockKind::Simple);
+        let body_blk = self.ssa.new_sealed_block(vec![loop_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
         let body_blk = self.convert_stmt(*body, body_blk);
 
         // Afterthought predecessors are the last body stmt and any continues
@@ -191,20 +222,22 @@ impl Converter {
       Imp::ForInElse { .. } => todo!("Ranged For is not yet supported"),
       Imp::WhileElse { condition, body, else_case } => {
         // Go to else on normal loop ending (no breaks)
-        let else_blk = self.ssa.new_block(vec![], BlockKind::Simple);
+        let else_blk = self.ssa.new_block(vec![]);
+        self.blk_kinds.push(BlockKind::Simple);
         let else_blk = self.convert_stmt(*else_case, else_blk);
 
         // Loop block, with condition going to else or body
-        let loop_kind =
-          BlockKind::Match { cond: condition.into(), cases: vec![], default: else_blk };
-        let loop_blk = self.ssa.new_block(vec![crnt_block], loop_kind);
+        let loop_blk = self.ssa.new_block(vec![crnt_block]);
+        let cond = self.ssa.convert_expr(&condition, loop_blk);
+        self.blk_kinds.push(BlockKind::Match { cond, cases: vec![], default: else_blk });
 
         // Seal else block
         self.add_block_pred(else_blk, loop_blk);
         self.ssa.seal_block(else_blk);
 
         // Exit block that ties everything together
-        let exit_blk = self.ssa.new_block(vec![else_blk], BlockKind::Simple);
+        let exit_blk = self.ssa.new_block(vec![else_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
 
         // Swap the entry and exit for break and continue inside the body
         let old_entry = self.scope_entry;
@@ -213,7 +246,8 @@ impl Converter {
         self.scope_exit = Some(exit_blk);
 
         // The loop body itself
-        let body_blk = self.ssa.new_sealed_block(vec![loop_blk], BlockKind::Simple);
+        let body_blk = self.ssa.new_sealed_block(vec![loop_blk]);
+        self.blk_kinds.push(BlockKind::Simple);
         let body_blk = self.convert_stmt(*body, body_blk);
 
         // Seal the loop block
@@ -232,8 +266,9 @@ impl Converter {
       Imp::Label { .. } => todo!("Labels are not yet supported"),
       Imp::Return { value } => {
         if let Some(proc_exit) = self.proc_exit {
-          let ret_kind = BlockKind::Return { dest: proc_exit, val: value.into() };
-          let ret_blk = self.ssa.new_sealed_block(vec![crnt_block], ret_kind);
+          let ret_blk = self.ssa.new_sealed_block(vec![crnt_block]);
+          let val = self.ssa.convert_expr(&value, ret_blk);
+          self.blk_kinds.push(BlockKind::Return { dest: proc_exit, val });
           self.add_block_pred(proc_exit, ret_blk);
           ret_blk
         } else {
@@ -241,11 +276,11 @@ impl Converter {
         }
       }
       Imp::Goto { .. } => todo!("Gotos are not yet supported"),
-      Imp::ProcedureDef { .. } => todo!("Procedure definitions are not yet supported"),
+      Imp::ProcedureDef { .. } => panic!("Found procedure definition during SSA. Should've been hoisted earlier"),
       Imp::Continue => {
         if let Some(scope_entry) = self.scope_entry {
-          let cont_kind = BlockKind::Jump { dest: scope_entry };
-          let cont_block = self.ssa.new_sealed_block(vec![crnt_block], cont_kind);
+          let cont_block = self.ssa.new_sealed_block(vec![crnt_block]);
+          self.blk_kinds.push(BlockKind::Jump { dest: scope_entry });
           self.add_block_pred(scope_entry, cont_block);
           cont_block
         } else {
@@ -254,8 +289,8 @@ impl Converter {
       }
       Imp::Break => {
         if let Some(scope_exit) = self.scope_exit {
-          let break_kind = BlockKind::Jump { dest: scope_exit };
-          let break_block = self.ssa.new_sealed_block(vec![crnt_block], break_kind);
+          let break_block = self.ssa.new_sealed_block(vec![crnt_block]);
+          self.blk_kinds.push(BlockKind::Jump { dest: scope_exit });
           self.add_block_pred(scope_exit, break_block);
           break_block
         } else {
@@ -263,19 +298,6 @@ impl Converter {
         }
       }
       Imp::Pass => crnt_block,
-    }
-  }
-
-  pub fn convert_expr(&mut self, expr: &Expr, blk_id: BlockId) -> Rc<Operand> {
-    match expr {
-      Expr::Var { name } => self.ssa.read_var(&name, blk_id),
-      Expr::Unsigned { numb } => Rc::new(Operand::Unsigned { numb: *numb }),
-      Expr::BinOp { op, left, right } => {
-        let left = self.convert_expr(left, blk_id);
-        let right = self.convert_expr(right, blk_id);
-        Rc::new(Operand::BinOp { op: *op, left, right })
-      }
-      _ => todo!("Other expressions not covered yet"),
     }
   }
 
