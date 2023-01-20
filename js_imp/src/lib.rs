@@ -1,6 +1,7 @@
+#![feature(box_patterns)]
 mod compile;
 use compile::{Compile, Ctx, JSResult};
-use imp_hvm::imp::Program as ImpProgram;
+use imp_hvm::imp::{Program as ImpProgram, to_fun::hoist_proc_defs};
 use std::path::Path;
 use swc_common::SourceMap;
 use swc_ecma_parser::{parse_file_as_program, Syntax};

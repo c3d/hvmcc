@@ -1,14 +1,15 @@
-use imp_hvm::Oper;
 use imp_hvm::fun::Expr as ImpExpr;
 use imp_hvm::imp::{Imp, Program as ImpProgram};
+use imp_hvm::Oper;
 use imp_hvm::{to_fun::unbound_in_stmt, CaseStmt};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use swc_ecma_ast::{
-  BinExpr, BinaryOp, BindingIdent, BlockStmt, Bool, CallExpr, Class, ClassDecl, Constructor, Decl,
-  Expr as JsExpr, ExprOrSpread, ExprStmt, ForStmt, Ident, IfStmt, LabeledStmt, Lit, Module,
-  ModuleItem, ParenExpr, Pat, Program as JsProgram, ReturnStmt, Script, Stmt, SwitchCase,
-  SwitchStmt, VarDecl, VarDeclOrExpr, VarDeclarator, WhileStmt,
+  AssignExpr, AssignOp, BinExpr, BinaryOp, BindingIdent, BlockStmt, Bool, CallExpr, ClassDecl,
+  Constructor, Decl, Expr as JsExpr, ExprOrSpread, ExprStmt, ForStmt, Ident, IfStmt, LabeledStmt,
+  Lit, MemberExpr, MemberProp, Module, ModuleItem, ParenExpr, Pat, Program as JsProgram,
+  ReturnStmt, Script, Stmt, SwitchCase, SwitchStmt, VarDecl, VarDeclOrExpr, VarDeclarator,
+  WhileStmt,
 };
 
 #[derive(Debug)]
@@ -16,6 +17,11 @@ pub enum JsErr {
   NotSupported { feature: String },
   NotImplemented { feature: String },
   CtrNotDefined { name: String },
+}
+
+#[inline(always)]
+fn not_implemented<T>(feature: &str) -> JSResult<T> {
+  Err(JsErr::NotImplemented { feature: feature.into() })
 }
 
 pub type JSResult<S> = Result<S, JsErr>;
@@ -234,8 +240,12 @@ fn switch_to_destructuring_match(
           if let Some(binds) = is_valid_case(expr) {
             let mut bound_args = HashMap::new();
             for (var, ctr_name) in binds {
-              let args = ctx.get_ctr(&ctr_name)?.iter().map(|x| ImpExpr::Var{name:format!("{var}.{x}")}).collect();
-              let ctr = ImpExpr::Ctr { name: ctr_name, args};
+              let args = ctx
+                .get_ctr(&ctr_name)?
+                .iter()
+                .map(|x| ImpExpr::Var { name: format!("{var}.{x}") })
+                .collect();
+              let ctr = ImpExpr::Ctr { name: ctr_name, args };
               bound_args.insert(var, ctr);
             }
             let body = case.cons.compile(ctx)?;
@@ -246,7 +256,7 @@ fn switch_to_destructuring_match(
         }
         // TODO: add default case
       }
-      // figure out with
+      // figure out which arguments should be passed.
       let total_args = unfinished_cases
         .iter()
         .flat_map(|Case { binds, body }| {
@@ -272,8 +282,7 @@ fn switch_to_destructuring_match(
             }
           }
         }
-        // TODO: create unique name for every switch case
-        let expr = ImpExpr::Ctr { name: "Switch".into(), args };
+        let expr = ImpExpr::Ctr { name: format!("Tuple{}", args.len()), args };
         let case = CaseStmt { matched: expr, body };
         match_cases.push(case);
       }
@@ -299,7 +308,7 @@ impl Compile<ImpExpr> for JsExpr {
       JsExpr::Bin(BinExpr { op, left, right, .. }) => {
         let left = Box::new(left.compile(ctx)?);
         let right = Box::new(right.compile(ctx)?);
-        let op = match op {          
+        let op = match op {
           BinaryOp::EqEq | BinaryOp::EqEqEq => Oper::Eql, //should them not be the same?
           BinaryOp::NotEq | BinaryOp::NotEqEq => Oper::Neq,
           BinaryOp::Lt => Oper::Ltn,
@@ -318,10 +327,10 @@ impl Compile<ImpExpr> for JsExpr {
           BinaryOp::BitAnd => Oper::And,
           BinaryOp::LogicalOr => Oper::Or,
           BinaryOp::LogicalAnd => Oper::And,
-          _ => todo!()
+          _ => todo!(),
         };
         Ok(ImpExpr::BinOp { op, left, right })
-      },
+      }
       JsExpr::Assign(_) => todo!(),
       JsExpr::Member(_) => todo!(),
       JsExpr::SuperProp(_) => todo!(),
@@ -426,13 +435,7 @@ impl Compile<ImpExpr> for ExprOrSpread {
 impl Compile<Imp> for Decl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
     match self {
-      Decl::Class(ClassDecl { ident, class, .. }) => {        
-        let name = id_to_string(ident);
-        let args = class.compile(ctx)?;
-        println!("{name} {:?}", args);
-        ctx.add_ctr(name, args);
-        Ok(Imp::Pass)
-      }
+      Decl::Class(class_decl) => class_decl.compile(ctx),
       Decl::Fn(_) => todo!(),
       Decl::Var(var_decl) => var_decl.compile(ctx),
       Decl::TsInterface(_) => todo!(),
@@ -452,34 +455,65 @@ impl Compile<Imp> for VarDecl {
         let assign = Imp::Assignment { name, expr };
         Ok(assign)
       } else {
-        Err(JsErr::NotSupported { feature: "Lefthand-side expression".into() })
+        not_implemented("Lefthand-side expression")
       }
     } else {
-      Err(JsErr::NotImplemented { feature: "Multiple assignment".into() })
+      not_implemented("Multiple assignment")
     }
   }
 }
 
-impl Compile<Vec<String>> for Class {
-  fn compile(&self, _ctx: &mut Ctx) -> JSResult<Vec<String>> {
-    use swc_ecma_ast::ClassMember;
-    use swc_ecma_ast::ParamOrTsParamProp;
-    let mut args = vec![];
-    for class_member in self.body.iter() {
+impl Compile<Imp> for ClassDecl {
+  fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
+    use swc_ecma_ast::{ClassMember, Param, ParamOrTsParamProp, PatOrExpr};
+    for class_member in self.class.body.iter() {
       match class_member {
-        ClassMember::Constructor(Constructor { params, .. }) => {
-          // TODO: validate constructor body.
+        ClassMember::Constructor(Constructor { params, body, .. }) => {
+          let mut func_args = vec![];
+          let mut ctr_args = vec![];
+          let mut prop_names = vec![];
           for param in params {
-            if let ParamOrTsParamProp::Param(param) = param {
-              if let Pat::Ident(ident) = &param.pat {
-                args.push(id_to_string(ident));
+            if let ParamOrTsParamProp::Param(Param { pat: Pat::Ident(ident), .. }) = param {
+              func_args.push(id_to_string(ident));
+            }
+          }
+          if let Some(body) = body {
+            for stmt in body.stmts.iter() {
+              // matches stmts is of the kind `this.prop = expr`
+              if let Stmt::Expr(ExprStmt {
+                expr:
+                  box JsExpr::Assign(AssignExpr {
+                    op: AssignOp::Assign,
+                    left:
+                      PatOrExpr::Pat(box Pat::Expr(box JsExpr::Member(MemberExpr {
+                        obj: box JsExpr::This(_),
+                        prop: MemberProp::Ident(property),
+                        ..
+                      }))),
+                    right,
+                    ..
+                  }),
+                ..
+              }) = stmt
+              {
+                prop_names.push(id_to_string(property));
+                ctr_args.push(right.compile(ctx)?);
+              } else {
+                return not_implemented("Non-assignment statement inside of class constructor body");
               }
             }
           }
+          let class_name = id_to_string(&self.ident);
+          ctx.add_ctr(class_name.clone(), prop_names);
+          let func_name = format!("{class_name}.construct");
+          let data = ImpExpr::Ctr { name: class_name, args: ctr_args };
+          let body = Box::new(Imp::Return { value: data });
+          let proc = Imp::ProcedureDef { name: func_name, args: func_args, body };
+          return Ok(proc);
         }
         _ => todo!(),
       }
     }
-    Ok(args)
+    Ok(Imp::Pass)
   }
 }

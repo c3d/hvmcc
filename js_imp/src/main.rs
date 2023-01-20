@@ -1,5 +1,5 @@
 use clap::Parser;
-use js_imp::js_to_imp;
+use js_imp::{js_to_imp};
 use std::path::Path;
 
 #[derive(Parser, Debug)]

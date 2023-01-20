@@ -69,7 +69,7 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &str, hoisted: &mut Vec<Procedure>
   }
 }
 
-fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
+pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
   match stmt {
     Imp::Assignment { name, expr } => {
       let mut unbound_vars = expr.get_unbound_vars();
@@ -134,3 +134,4 @@ fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
     Imp::Continue | Imp::Break | Imp::Pass => HashSet::new(),
   }
 }
+

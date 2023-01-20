@@ -2,6 +2,7 @@ class Foo {
   constructor(x, y) {
     this.x = x;
     this.y = y;
+    this.test = 1 + x + y;
   }
 }
 
