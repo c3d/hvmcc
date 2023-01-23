@@ -1,6 +1,6 @@
 class Null {}
 
-var nil = new Null();
+let nil = new Null();
 
 class Leaf {
   constructor(value) {
@@ -17,11 +17,11 @@ class Node {
 
 class Free {}
 
-var free = new Free();
+let free = new Free();
 
 class Used {}
 
-var used = new Used();
+let used = new Used();
 
 class Both {
   constructor(left, right) {
@@ -38,7 +38,6 @@ function toMap(t) {
     return radix(t.value);
   case t instanceof Node:
     return merge(toMap(t.left), toMap(t.right));
-
   }
 };
 
@@ -60,7 +59,6 @@ function sort(t) {
 
 // merge :: Map -> Map -> Map
 function merge(a, b) {
-
   switch (true) {
   case a instanceof Free:
     return b;
@@ -77,31 +75,31 @@ function merge(a, b) {
 
 // radix :: Word64 -> Map
 function radix(n) {
-  var r0 = used;
-  var r1 = u60_swap(n & 1, r0, free);
-  var r2 = u60_swap(n & 2, r1, free);
-  var r3 = u60_swap(n & 4, r2, free);
-  var r4 = u60_swap(n & 8, r3, free);
-  var r5 = u60_swap(n & 16, r4, free);
-  var r6 = u60_swap(n & 32, r5, free);
-  var r7 = u60_swap(n & 64, r6, free);
-  var r8 = u60_swap(n & 128, r7, free);
-  var r9 = u60_swap(n & 256, r8, free);
-  var rA = u60_swap(n & 512, r9, free);
-  var rB = u60_swap(n & 1024, rA, free);
-  var rC = u60_swap(n & 2048, rB, free);
-  var rD = u60_swap(n & 4096, rC, free);
-  var rE = u60_swap(n & 8192, rD, free);
-  var rF = u60_swap(n & 16384, rE, free);
-  var rG = u60_swap(n & 32768, rF, free);
-  var rH = u60_swap(n & 65536, rG, free);
-  var rI = u60_swap(n & 131072, rH, free);
-  var rJ = u60_swap(n & 262144, rI, free);
-  var rK = u60_swap(n & 524288, rJ, free);
-  var rL = u60_swap(n & 1048576, rK, free);
-  var rM = u60_swap(n & 2097152, rL, free);
-  var rN = u60_swap(n & 4194304, rM, free);
-  var rO = u60_swap(n & 8388608, rN, free);
+  let r0 = used;
+  let r1 = u60_swap(n & 1, r0, free);
+  let r2 = u60_swap(n & 2, r1, free);
+  let r3 = u60_swap(n & 4, r2, free);
+  let r4 = u60_swap(n & 8, r3, free);
+  let r5 = u60_swap(n & 16, r4, free);
+  let r6 = u60_swap(n & 32, r5, free);
+  let r7 = u60_swap(n & 64, r6, free);
+  let r8 = u60_swap(n & 128, r7, free);
+  let r9 = u60_swap(n & 256, r8, free);
+  let rA = u60_swap(n & 512, r9, free);
+  let rB = u60_swap(n & 1024, rA, free);
+  let rC = u60_swap(n & 2048, rB, free);
+  let rD = u60_swap(n & 4096, rC, free);
+  let rE = u60_swap(n & 8192, rD, free);
+  let rF = u60_swap(n & 16384, rE, free);
+  let rG = u60_swap(n & 32768, rF, free);
+  let rH = u60_swap(n & 65536, rG, free);
+  let rI = u60_swap(n & 131072, rH, free);
+  let rJ = u60_swap(n & 262144, rI, free);
+  let rK = u60_swap(n & 524288, rJ, free);
+  let rL = u60_swap(n & 1048576, rK, free);
+  let rM = u60_swap(n & 2097152, rL, free);
+  let rN = u60_swap(n & 4194304, rM, free);
+  let rO = u60_swap(n & 8388608, rN, free);
   return rO;
 };
 
@@ -142,9 +140,9 @@ function gen_go(n, x) {
   if (n === 0) {
     return new Leaf(x);
   } else {
-    var x_ = x * 2;
-    var y_ = x_ + 1;
-    var n_ = n - 1;
+    let x_ = x * 2;
+    let y_ = x_ + 1;
+    let n_ = n - 1;
     return new Node(gen_go(n_, x_), gen_go(n_, y_));
   }
 };

@@ -9,7 +9,7 @@ use swc_ecma_ast::{
   Constructor, Decl, Expr as JsExpr, ExprOrSpread, ExprStmt, ForStmt, Ident, IfStmt, LabeledStmt,
   Lit, MemberExpr, MemberProp, Module, ModuleItem, ParenExpr, Pat, Program as JsProgram,
   ReturnStmt, Script, Stmt, SwitchCase, SwitchStmt, VarDecl, VarDeclOrExpr, VarDeclarator,
-  WhileStmt,
+  WhileStmt, NewExpr, FnDecl, VarDeclKind,
 };
 
 #[derive(Debug)]
@@ -17,6 +17,8 @@ pub enum JsErr {
   NotSupported { feature: String },
   NotImplemented { feature: String },
   CtrNotDefined { name: String },
+  UnboundVariable { name: String},
+  VarKindIsProhibited,
 }
 
 #[inline(always)]
@@ -26,17 +28,30 @@ fn not_implemented<T>(feature: &str) -> JSResult<T> {
 
 pub type JSResult<S> = Result<S, JsErr>;
 
+// enum VarKind {
+//   Let,
+//   Const,
+// }
+
+// struct VarInfo {
+//   kind: VarKind,
+//   typp: Option<TypeInfo>,
+// }
+
+// struct TypeInfo {
+  
+// }
+
 pub struct Ctx {
   ctrs: HashMap<String, Vec<String>>, // ctrs
+  //vars: HashMap<String, VarInfo>
 }
 
 impl Ctx {
   pub fn new() -> Self {
     let ctrs = HashMap::new();
+    // let vars = HashMap::new();
     Ctx { ctrs }
-  }
-  pub fn default() -> Self {
-    Self::new()
   }
   fn add_ctr(&mut self, name: String, args: Vec<String>) {
     self.ctrs.insert(name, args);
@@ -259,11 +274,10 @@ fn switch_to_destructuring_match(
       // figure out which arguments should be passed.
       let total_args = unfinished_cases
         .iter()
-        .flat_map(|Case { binds, body }| {
+        .flat_map(|Case { binds, body:_ }| {
           binds
             .iter()
             .map(|(name, _)| name.clone())
-            .chain(unbound_in_stmt(body).into_iter())
         })
         .collect::<HashSet<_>>();
       let mut match_cases = vec![];
@@ -282,13 +296,13 @@ fn switch_to_destructuring_match(
             }
           }
         }
-        let expr = ImpExpr::Ctr { name: format!("Tuple{}", args.len()), args };
+        let expr = ImpExpr::Ctr { name: "Match".into(), args };
         let case = CaseStmt { matched: expr, body };
         match_cases.push(case);
       }
       let args = total_args.into_iter().map(|name| ImpExpr::Var { name }).collect();
       // TODO: same unique name
-      let expr = ImpExpr::Ctr { name: "Switch".into(), args };
+      let expr = ImpExpr::Ctr { name: "Match".into(), args };
       let match_stmt = Imp::MatchStmt { expr, cases: match_cases, default: Box::new(Imp::Pass) };
       return Ok(Some(match_stmt));
     }
@@ -332,7 +346,16 @@ impl Compile<ImpExpr> for JsExpr {
         Ok(ImpExpr::BinOp { op, left, right })
       }
       JsExpr::Assign(_) => todo!(),
-      JsExpr::Member(_) => todo!(),
+      JsExpr::Member(MemberExpr { obj, prop, .. }) => {
+        match (obj, prop) {
+          (box JsExpr::Ident(var_name), MemberProp::Ident(prop_name)) => {
+            let name = format!("{}.{}", id_to_string(&var_name), id_to_string(prop_name));
+            Ok(ImpExpr::Var { name })
+          },
+          _ => not_implemented("Arbitrary member expression")
+
+        }
+      },
       JsExpr::SuperProp(_) => todo!(),
       JsExpr::Cond(_) => todo!(),
       JsExpr::Call(CallExpr { callee, args, .. }) => match callee {
@@ -356,7 +379,21 @@ impl Compile<ImpExpr> for JsExpr {
           Ok(call)
         }
       },
-      JsExpr::New(_) => todo!(),
+      JsExpr::New(NewExpr { callee, args, .. }) => {
+        if let box JsExpr::Ident(id) = callee {
+          let name = format!("{}.construct",id_to_string(&id));
+          let args = if let Some(args) = args {
+            args.iter().map(|x| x.compile(ctx)).collect::<JSResult<Vec<ImpExpr>>>()?
+          }
+          else {
+            vec![]
+          };  
+          Ok(ImpExpr::FunCall { name, args })
+        }
+        else {
+          not_implemented("New-object with arbitrary expression")
+        }
+      },
       JsExpr::Seq(_) => todo!(),
       JsExpr::Ident(ident) => {
         let name = id_to_string(ident);
@@ -425,7 +462,7 @@ impl Compile<Imp> for VarDeclOrExpr {
 impl Compile<ImpExpr> for ExprOrSpread {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<ImpExpr> {
     if let Some(_span) = self.spread {
-      Err(JsErr::NotSupported { feature: "Spread operator".into() })
+      not_implemented("Spread operator")
     } else {
       self.expr.compile(ctx)
     }
@@ -436,7 +473,7 @@ impl Compile<Imp> for Decl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
     match self {
       Decl::Class(class_decl) => class_decl.compile(ctx),
-      Decl::Fn(_) => todo!(),
+      Decl::Fn(fn_decl) => fn_decl.compile(ctx),
       Decl::Var(var_decl) => var_decl.compile(ctx),
       Decl::TsInterface(_) => todo!(),
       Decl::TsTypeAlias(_) => todo!(),
@@ -448,6 +485,12 @@ impl Compile<Imp> for Decl {
 
 impl Compile<Imp> for VarDecl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
+    match self.kind {
+      VarDeclKind::Var => Err(JsErr::VarKindIsProhibited),
+      _ => Ok(())
+      //VarDeclKind::Let => Ok(VarKind::Let),
+      //VarDeclKind::Const => Ok(VarKind::Const),
+    }?;
     if let [VarDeclarator { name, init, .. }] = self.decls.as_slice() {
       if let (Pat::Ident(BindingIdent { id, .. }), Some(val)) = (name, init) {
         let name = id_to_string(id);
@@ -466,12 +509,12 @@ impl Compile<Imp> for VarDecl {
 impl Compile<Imp> for ClassDecl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
     use swc_ecma_ast::{ClassMember, Param, ParamOrTsParamProp, PatOrExpr};
+    let mut func_args = vec![];
+    let mut ctr_args = vec![];
+    let mut prop_names = vec![];
     for class_member in self.class.body.iter() {
       match class_member {
         ClassMember::Constructor(Constructor { params, body, .. }) => {
-          let mut func_args = vec![];
-          let mut ctr_args = vec![];
-          let mut prop_names = vec![];
           for param in params {
             if let ParamOrTsParamProp::Param(Param { pat: Pat::Ident(ident), .. }) = param {
               func_args.push(id_to_string(ident));
@@ -503,17 +546,36 @@ impl Compile<Imp> for ClassDecl {
               }
             }
           }
-          let class_name = id_to_string(&self.ident);
-          ctx.add_ctr(class_name.clone(), prop_names);
-          let func_name = format!("{class_name}.construct");
-          let data = ImpExpr::Ctr { name: class_name, args: ctr_args };
-          let body = Box::new(Imp::Return { value: data });
-          let proc = Imp::ProcedureDef { name: func_name, args: func_args, body };
-          return Ok(proc);
         }
         _ => todo!(),
       }
     }
-    Ok(Imp::Pass)
+    let class_name = id_to_string(&self.ident);
+    ctx.add_ctr(class_name.clone(), prop_names);
+    let func_name = format!("{class_name}.construct");
+    let data = ImpExpr::Ctr { name: class_name, args: ctr_args };
+    let body = Box::new(Imp::Return { value: data });
+    let proc = Imp::ProcedureDef { name: func_name, args: func_args, body };
+    Ok(proc)
+  }
+}
+
+impl Compile<Imp> for FnDecl {
+  fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
+    use swc_ecma_ast::Param;
+    let mut args = vec![];
+    let name = id_to_string(&self.ident);
+    for param in self.function.params.iter() {
+      if let Param { pat: Pat::Ident(BindingIdent { id, ..}), .. } = param {
+        args.push(id_to_string(id));
+      }
+    }
+    if let Some(body) = &self.function.body {
+      let body = Box::new(body.stmts.compile(ctx)?);
+      Ok(Imp::ProcedureDef { name, args, body })
+    }
+    else {
+      not_implemented("Function without body")
+    }
   }
 }
