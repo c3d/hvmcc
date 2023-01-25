@@ -6,10 +6,10 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use swc_ecma_ast::{
   AssignExpr, AssignOp, BinExpr, BinaryOp, BindingIdent, BlockStmt, Bool, CallExpr, ClassDecl,
-  Constructor, Decl, Expr as JsExpr, ExprOrSpread, ExprStmt, ForStmt, Ident, IfStmt, LabeledStmt,
-  Lit, MemberExpr, MemberProp, Module, ModuleItem, ParenExpr, Pat, Program as JsProgram,
-  ReturnStmt, Script, Stmt, SwitchCase, SwitchStmt, VarDecl, VarDeclOrExpr, VarDeclarator,
-  WhileStmt, NewExpr, FnDecl, VarDeclKind,
+  Constructor, Decl, Expr as JsExpr, ExprOrSpread, ExprStmt, FnDecl, ForStmt, Ident, IfStmt,
+  LabeledStmt, Lit, MemberExpr, MemberProp, Module, ModuleItem, NewExpr, ParenExpr, Pat,
+  Program as JsProgram, ReturnStmt, Script, Stmt, SwitchCase, SwitchStmt, VarDecl, VarDeclKind,
+  VarDeclOrExpr, VarDeclarator, WhileStmt, ArrowExpr,
 };
 
 #[derive(Debug)]
@@ -17,7 +17,7 @@ pub enum JsErr {
   NotSupported { feature: String },
   NotImplemented { feature: String },
   CtrNotDefined { name: String },
-  UnboundVariable { name: String},
+  UndeclaredVariable { name: String },
   VarKindIsProhibited,
 }
 
@@ -28,37 +28,71 @@ fn not_implemented<T>(feature: &str) -> JSResult<T> {
 
 pub type JSResult<S> = Result<S, JsErr>;
 
-// enum VarKind {
-//   Let,
-//   Const,
-// }
+enum VarKind {
+  Let,
+  Const,
+  FunArg,
+}
 
-// struct VarInfo {
-//   kind: VarKind,
-//   typp: Option<TypeInfo>,
-// }
+struct VarInfo {
+  kind: VarKind,
+  typp: Option<TypeInfo>,
+  curr_name: String,
+}
 
-// struct TypeInfo {
-  
-// }
+struct TypeInfo {}
 
 pub struct Ctx {
   ctrs: HashMap<String, Vec<String>>, // ctrs
-  //vars: HashMap<String, VarInfo>
+  vars: Vec<HashMap<String, VarInfo>>,
 }
 
 impl Ctx {
   pub fn new() -> Self {
     let ctrs = HashMap::new();
-    // let vars = HashMap::new();
-    Ctx { ctrs }
+    let vars = vec![HashMap::new()];
+    Ctx { ctrs, vars }
   }
+
   fn add_ctr(&mut self, name: String, args: Vec<String>) {
     self.ctrs.insert(name, args);
   }
 
   fn get_ctr(&self, name: &String) -> JSResult<&Vec<String>> {
     self.ctrs.get(name).ok_or_else(|| JsErr::CtrNotDefined { name: name.clone() })
+  }
+
+  fn add_var(&mut self, name: String, typp: Option<TypeInfo>, kind: VarKind) -> String {
+    let curr_name = match self.get_var(&name) {
+      Some(VarInfo {curr_name, ..}) => format!("{curr_name}_"), //add count to var name?
+      None => name.clone(),
+    };
+    let last = match self.vars.last_mut() {
+      None => unreachable!("Scope stack should never be empty."),
+      Some(last) => last,
+    };
+    last.insert(name, VarInfo { kind, typp, curr_name: curr_name.clone() });
+    curr_name
+  }
+
+  fn get_var(&self, name: &String) -> Option<&VarInfo> {
+    for scope in self.vars.iter().rev() {
+      match scope.get(name) {
+        Some(varinfo) => {
+          return Some(varinfo);
+        }
+        None => {}
+      }
+    }
+    None
+  }
+
+  fn enter_scope(&mut self) {
+    self.vars.push(HashMap::new());
+  }
+
+  fn leave_scope(&mut self) {
+    self.vars.pop();
   }
 }
 
@@ -118,7 +152,12 @@ where
 impl Compile<Imp> for Stmt {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
     match self {
-      Stmt::Block(BlockStmt { stmts, .. }) => stmts.compile(ctx),
+      Stmt::Block(BlockStmt { stmts, .. }) => {
+        ctx.enter_scope();
+        let ret = stmts.compile(ctx);
+        ctx.leave_scope();
+        ret
+      }
       Stmt::With(_) => todo!(),
       Stmt::Return(ReturnStmt { arg, .. }) => {
         let value = match arg {
@@ -274,11 +313,7 @@ fn switch_to_destructuring_match(
       // figure out which arguments should be passed.
       let total_args = unfinished_cases
         .iter()
-        .flat_map(|Case { binds, body:_ }| {
-          binds
-            .iter()
-            .map(|(name, _)| name.clone())
-        })
+        .flat_map(|Case { binds, body: _ }| binds.iter().map(|(name, _)| name.clone()))
         .collect::<HashSet<_>>();
       let mut match_cases = vec![];
       for Case { mut binds, body } in unfinished_cases.into_iter() {
@@ -341,20 +376,17 @@ impl Compile<ImpExpr> for JsExpr {
           BinaryOp::BitAnd => Oper::And,
           BinaryOp::LogicalOr => Oper::Or,
           BinaryOp::LogicalAnd => Oper::And,
-          _ => todo!(),
+          _ => todo!("Operation not implemented."),
         };
         Ok(ImpExpr::BinOp { op, left, right })
       }
       JsExpr::Assign(_) => todo!(),
-      JsExpr::Member(MemberExpr { obj, prop, .. }) => {
-        match (obj, prop) {
-          (box JsExpr::Ident(var_name), MemberProp::Ident(prop_name)) => {
-            let name = format!("{}.{}", id_to_string(&var_name), id_to_string(prop_name));
-            Ok(ImpExpr::Var { name })
-          },
-          _ => not_implemented("Arbitrary member expression")
-
+      JsExpr::Member(MemberExpr { obj, prop, .. }) => match (obj, prop) {
+        (box JsExpr::Ident(var_name), MemberProp::Ident(prop_name)) => {
+          let name = format!("{}.{}", id_to_string(&var_name), id_to_string(prop_name));
+          Ok(ImpExpr::Var { name })
         }
+        _ => not_implemented("Arbitrary member expression"),
       },
       JsExpr::SuperProp(_) => todo!(),
       JsExpr::Cond(_) => todo!(),
@@ -362,13 +394,14 @@ impl Compile<ImpExpr> for JsExpr {
         swc_ecma_ast::Callee::Super(_) => todo!(),
         swc_ecma_ast::Callee::Import(_) => todo!(),
         swc_ecma_ast::Callee::Expr(func) => {
-          let call = match func.compile(ctx)? {
-            ImpExpr::Var { name } => {
+          let call = match func {
+            box JsExpr::Ident(ident) => {
+              let name = id_to_string(&ident);
               let args = args.iter().map(|x| x.compile(ctx)).collect::<JSResult<Vec<ImpExpr>>>()?;
               ImpExpr::FunCall { name, args }
             }
             term => {
-              let mut expr = term;
+              let mut expr = term.compile(ctx)?;
               for arg in args {
                 let argm = Box::new(arg.compile(ctx)?);
                 expr = ImpExpr::App { expr: Box::new(expr), argm };
@@ -381,24 +414,25 @@ impl Compile<ImpExpr> for JsExpr {
       },
       JsExpr::New(NewExpr { callee, args, .. }) => {
         if let box JsExpr::Ident(id) = callee {
-          let name = format!("{}.construct",id_to_string(&id));
+          let name = format!("{}.construct", id_to_string(&id));
           let args = if let Some(args) = args {
             args.iter().map(|x| x.compile(ctx)).collect::<JSResult<Vec<ImpExpr>>>()?
-          }
-          else {
+          } else {
             vec![]
-          };  
+          };
           Ok(ImpExpr::FunCall { name, args })
-        }
-        else {
+        } else {
           not_implemented("New-object with arbitrary expression")
         }
-      },
+      }
       JsExpr::Seq(_) => todo!(),
       JsExpr::Ident(ident) => {
         let name = id_to_string(ident);
-        let var = ImpExpr::Var { name };
-        Ok(var)
+        let name = match ctx.get_var(&name) {
+          Some(VarInfo { curr_name, .. }) => Ok(curr_name.clone()),
+          None => Err(JsErr::UndeclaredVariable { name }),
+        }?;
+        Ok(ImpExpr::Var { name })
       }
       JsExpr::Lit(literal) => literal.compile(ctx),
       JsExpr::Tpl(_) => todo!(),
@@ -485,16 +519,15 @@ impl Compile<Imp> for Decl {
 
 impl Compile<Imp> for VarDecl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
-    match self.kind {
+    let kind = match self.kind {
       VarDeclKind::Var => Err(JsErr::VarKindIsProhibited),
-      _ => Ok(())
-      //VarDeclKind::Let => Ok(VarKind::Let),
-      //VarDeclKind::Const => Ok(VarKind::Const),
+      VarDeclKind::Let => Ok(VarKind::Let),
+      VarDeclKind::Const => Ok(VarKind::Const),
     }?;
     if let [VarDeclarator { name, init, .. }] = self.decls.as_slice() {
       if let (Pat::Ident(BindingIdent { id, .. }), Some(val)) = (name, init) {
-        let name = id_to_string(id);
         let expr = val.compile(ctx)?;
+        let name = ctx.add_var(id_to_string(id), None, kind);
         let assign = Imp::Assignment { name, expr };
         Ok(assign)
       } else {
@@ -517,7 +550,8 @@ impl Compile<Imp> for ClassDecl {
         ClassMember::Constructor(Constructor { params, body, .. }) => {
           for param in params {
             if let ParamOrTsParamProp::Param(Param { pat: Pat::Ident(ident), .. }) = param {
-              func_args.push(id_to_string(ident));
+              let arg_name = ctx.add_var(id_to_string(ident), None, VarKind::FunArg);
+              func_args.push(arg_name);
             }
           }
           if let Some(body) = body {
@@ -542,7 +576,9 @@ impl Compile<Imp> for ClassDecl {
                 prop_names.push(id_to_string(property));
                 ctr_args.push(right.compile(ctx)?);
               } else {
-                return not_implemented("Non-assignment statement inside of class constructor body");
+                return not_implemented(
+                  "Non-assignment statement inside of class constructor body",
+                );
               }
             }
           }
@@ -562,19 +598,22 @@ impl Compile<Imp> for ClassDecl {
 
 impl Compile<Imp> for FnDecl {
   fn compile(&self, ctx: &mut Ctx) -> JSResult<Imp> {
-    use swc_ecma_ast::Param;
-    let mut args = vec![];
-    let name = id_to_string(&self.ident);
-    for param in self.function.params.iter() {
-      if let Param { pat: Pat::Ident(BindingIdent { id, ..}), .. } = param {
-        args.push(id_to_string(id));
-      }
-    }
     if let Some(body) = &self.function.body {
+      use swc_ecma_ast::Param;
+      let mut args = vec![];
+      let name = id_to_string(&self.ident);
+      ctx.enter_scope();
+      for param in self.function.params.iter() {
+        if let Param { pat: Pat::Ident(BindingIdent { id, .. }), .. } = param {
+          let var_name = id_to_string(id);
+          ctx.add_var(var_name.clone(), None, VarKind::FunArg);
+          args.push(var_name);
+        }
+      }
       let body = Box::new(body.stmts.compile(ctx)?);
+      ctx.leave_scope();
       Ok(Imp::ProcedureDef { name, args, body })
-    }
-    else {
+    } else {
       not_implemented("Function without body")
     }
   }

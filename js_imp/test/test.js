@@ -8,17 +8,21 @@ class Foo {
 
 class Bar {
   constructor(z) {
-    this.z = z
+    this.z = z;
   }
 }
 
-var a = Bar(1)
+let a = new Bar(1);
 
-switch (true) {
-case a instanceof Bar && b instanceof Foo:
-  return (1 + d) * 3
-case b instanceof Foo:
-  return e
-case c instanceof Foo && a instanceof Bar:
-  return f
+{
+  let a = a + 1;
+  let b = 2;
+  {
+    let b = a;
+    let a = a + 2;
+    console.log(a);
+  }
+  console.log(a);
 }
+
+console.log(a);
