@@ -1,208 +1,211 @@
 use super::*;
-use crate::fun::{Expr, Id};
-use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use crate::fun::{self, Id};
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub struct BraunConverter {
   pub blocks: Vec<Block>,
-  crnt_def: HashMap<BlockId, HashMap<Id, Rc<Operand>>>,
-  incomplete_phis: HashMap<BlockId, HashMap<Id, PhiRef>>,
+  pub assignments: Vec<Assignment>,
   sealed_blocks: HashSet<BlockId>,
-  blk_count: BlockId,
 }
 
 impl BraunConverter {
   pub fn new() -> Self {
     BraunConverter {
       blocks: Vec::new(),
-      crnt_def: HashMap::new(),
-      incomplete_phis: HashMap::new(),
+      assignments: Vec::new(),
       sealed_blocks: HashSet::new(),
-      blk_count: 0,
     }
   }
 
-  pub fn write_var(&mut self, name: Id, blk_id: BlockId, value: Rc<Operand>) {
-    #[cfg(feature = "log")]
-    println!("write_var {name} {block:?} {value:?}");
-    if let Some(vals) = self.crnt_def.get_mut(&blk_id) {
-      vals.insert(name, value);
+  fn write_var(&mut self, name: Id, blk_id: BlockId, ssa_name: SsaId) {
+    self.blocks[blk_id].crnt_defs.insert(name, ssa_name);
+  }
+
+  fn read_var(&mut self, name: &Id, blk_id: BlockId) -> ConvertResult<SsaId> {
+    if let Some(val) = self.blocks[blk_id].crnt_defs.get(name) {
+      // Local value numbering, definition already in block
+      Ok(*val)
     } else {
-      let vals = HashMap::from([(name, value)]);
-      self.crnt_def.insert(blk_id, vals);
-    }
-  }
-
-  pub fn read_var(&mut self, name: &Id, blk_id: BlockId) -> Rc<Operand> {
-    #[cfg(feature = "log")]
-    println!("read_var {name} {block:?}");
-    if let Some(vals) = self.crnt_def.get(&blk_id) {
-      if let Some(val) = vals.get(name) {
-        // Local value numbering
-        return val.clone();
-      }
-    }
-    // Global value numbering
-    self.read_var_recursive(name, blk_id)
-  }
-
-  /// If a block currently contains no definition for a variable,
-  /// we recursively look for a definition in its predecessors.
-  fn read_var_recursive(&mut self, name: &Id, blk_id: BlockId) -> Rc<Operand> {
-    let mut value: Rc<Operand>;
-    if !self.sealed_blocks.contains(&blk_id) {
-      // But how to handle a look-up of a variable in an unsealed block,
-      // which has no current definition for this variable?
-      // In this case, we place an operandless φ function into the block
-      // and record it as proxy definition
-      let phi = Rc::new(RefCell::new(Phi::new(name.clone(), blk_id)));
-      value = Rc::new(Operand::Phi { phi: phi.clone() });
-      if let Some(vals) = self.incomplete_phis.get_mut(&blk_id) {
-        vals.insert(name.clone(), phi);
+      // Global value numbering, look recursively for the definition in predecessors
+      // In case of branching, this will insert phis
+      let blk_is_sealed = self.sealed_blocks.contains(&blk_id);
+      let value = if blk_is_sealed {
+        if self.blocks[blk_id].preds.len() == 1 {
+          // If the block has a single predecessor, just query it directly
+          self.read_var(name, self.blocks[blk_id].preds[0])?
+        } else {
+          // Otherwise, we collect the definitions from all predecessors
+          // and construct a φ function, which joins them into a single new value.
+          // This φ function is recorded as current definition in this block.
+          let value = self.new_phi(name.clone(), blk_id);
+          // Looking for a value in a predecessor might lead to more recursive look-ups.
+          // Due to loops in the program, those might lead to endless recursion.
+          // So, before recursing, we first create the φ function without operands
+          // and record it as the current definition for the variable in the block.
+          // Then, we determine the φ function’s operands.
+          // If a recursive look-up arrives back at the block,
+          // this φ function will provide a definition and the recursion will end.
+          self.write_var(name.clone(), blk_id, value);
+          self.add_phi_operands(value)?;
+          value
+        }
       } else {
-        let vals = HashMap::from([(name.clone(), phi)]);
-        self.incomplete_phis.insert(blk_id, vals);
-      }
-    } else {
-      let preds = &self.blocks[blk_id].preds;
-      if preds.len() == 1 {
-        // If the block has a single predecessor, just query it recursively for a definition.
-        // (Optimized common case of one predecessor: No phi needed)
-        value = self.read_var(name, preds[0]);
-      } else {
-        // Otherwise, we collect the definitions from all predecessors
-        // and construct a φ function, which joins them into a single new value.
-        // This φ function is recorded as current definition in this basic block.
-        let phi = Rc::new(RefCell::new(Phi::new(name.clone(), blk_id)));
-        value = Rc::new(Operand::Phi { phi: phi.clone() });
-        // Looking for a value in a predecessor might in turn lead to further recursive look-ups.
-        // Due to loops in the program, those might lead to endless recursion.
-        // Therefore, before recursing, we first create the φ function without operands
-        // and record it as the current definition for the variable in the block.
-        // Then, we determine the φ function’s operands.
-        // If a recursive look-up arrives back at the block,
-        // this φ function will provide a definition and the recursion will end.
-        self.write_var(name.clone(), blk_id, value);
-        value = self.add_phi_operands(name, phi);
-      }
-    }
-    self.write_var(name.clone(), blk_id, value.clone());
-    value
+        // In case of an unsealed block with no local definition of this var,
+        // we place an operandless φ function into the block
+        // and record it as proxy definition
+        let value = self.new_phi(name.clone(), blk_id);
+        self.blocks[blk_id].incomplete_phis.insert(name.clone(), value);
+        value
+      };
+      // Write the definition found in predecessor in the current block
+      self.write_var(name.clone(), blk_id, value);
+      Ok(value)
+    } 
   }
 
-  fn add_phi_operands(&mut self, name: &Id, phi: Rc<RefCell<Phi>>) -> Rc<Operand> {
-    {
-      let blk_id = { phi.borrow().blk_id };
-      let preds = self.blocks[blk_id].preds.clone();
-      for pred in preds {
-        let val = self.read_var(name, pred);
-        phi.borrow_mut().add_operand(val);
+  fn add_phi_operands(&mut self, phi_id: SsaId) -> ConvertResult<()> {
+    let blk_id = self.assignments[phi_id.0].blk;
+    // Check all predecessors for possible operands of the phi
+    for pred in self.blocks[blk_id].preds.clone() {
+      let name = self.get_phi_ref(phi_id).unwrap().name.clone();
+      let val = self.read_var(&name, pred)?;
+      let pred_is_phi = matches!(self.assignments[val.0].op, Operand::Phi(_));
+      let phi = self.get_phi_ref(phi_id).unwrap();
+      // Add operand
+      phi.ops.push(val);
+      // Add user if op is a phi
+      if pred_is_phi {
+        phi.users.insert(val);
       }
     }
-    self.try_remove_trivial_phi(phi)
+    self.try_remove_trivial_phi(phi_id)
   }
 
   /// Recursive look-up might leave redundant φ functions.
   /// We call a φ function v_φ trivial iff it just references itself
   /// and one other value v any number of times.
   /// Such a φ function can be removed and the value v is used instead;
-  fn try_remove_trivial_phi(&self, phi: Rc<RefCell<Phi>>) -> Rc<Operand> {
-    let mut same: Option<Rc<Operand>> = None;
-    {
-      let phi_ = phi.borrow();
-      for op in phi_.ops.iter() {
-        match (&**op, same.as_deref()) {
-          // Unique value or self−reference
-          (Operand::Phi { phi: op }, _) if op.borrow().name == phi_.name => continue,
-          (Operand::Phi { phi: op }, Some(Operand::Phi { phi: same }))
-            if op.borrow().name == same.borrow().name =>
-          {
-            continue
-          }
-          (Operand::Undef, Some(Operand::Undef)) => continue,
-          _ => (),
+  fn try_remove_trivial_phi(&mut self, phi_id: SsaId) -> ConvertResult<()> {
+    // Search all unique and not self-referential values
+    let uniques: HashSet<SsaId> = self.get_phi_ref(phi_id).unwrap().ops.iter().map(|x| x.clone()).filter(|op| op != &phi_id).collect();
+
+    // Phis with 0 or 1 operand are trivial
+    if uniques.len() < 2 {
+      if let Some(unique) = uniques.iter().next() {
+        // If the phi only points to a single value,
+        // we replace it by an indirection to that value
+        self.assignments[phi_id.0].op = Operand::Value(Expr::Var { name: *unique }.into());
+        // Remove self from users
+        let users = &mut self.get_phi_ref(phi_id).unwrap().users;
+        users.remove(&phi_id);
+        // Check all other phi users, which might have become trivial
+        for user in users.clone() {
+          self.try_remove_trivial_phi(user)?;
         }
-        if same.is_some() {
-          // The phi merges at least two values: not trivial
-          return Rc::new(Operand::Phi { phi: phi.clone() });
-        }
-        same = Some(op.clone());
+        Ok(())
+      } else {
+        // If the φ function has no operand other than itself,
+        // it means that it is either unreachable or in the start block.
+        // In this case, it is an undefined value, so we error
+        Err("Undefined reference found".into())
       }
+    } else {
+      Ok(())
     }
-    // As a special case, the φ function might use no other value besides itself.
-    // This means that it is either unreachable or in the start block.
-    // We replace it by an undefined value.
-    let same = same.unwrap_or(Rc::new(Operand::Undef));
-
-    // Remember all users except the phi itself
-    let users: Vec<PhiRef> = {
-      let mut phi = phi.borrow_mut();
-      let name = phi.name.clone();
-      phi.users.remove(&name);
-      phi.users.values().map(|x| x.clone()).collect()
-    };
-
-    // Reroute all uses of phi to same and remove phi
-    {
-      phi.borrow_mut().replace_by(same.clone());
-    }
-
-    // Try to recursively remove all phi users, which might have become trivial
-    for user in users {
-      self.try_remove_trivial_phi(user);
-    }
-    same
   }
 
   /// We call a basic block sealed if no further predecessors will be added to the block.
-  pub fn seal_block(&mut self, blk_id: BlockId) {
+  pub fn seal_block(&mut self, blk_id: BlockId) -> ConvertResult<()> {
     // Add operands to every incomplete phi of this block, making them complete
-    let phis = if let Some(phis) = self.incomplete_phis.get(&blk_id) {
-      // This cloning is only to make the borrow checker happy
-      phis.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-    } else {
-      vec![]
-    };
-    for (name, phi) in phis {
-      self.add_phi_operands(&name, phi.clone());
+    // TODO: This cloning is only to make the borrow checker happy,
+    // but I'm not sure if this is totally correct.
+    // What if adding an operand creates a new phi in this block?
+    let phis: Vec<_> = self.blocks[blk_id].incomplete_phis.values().map(|x| x.clone()).collect();
+    for phi in phis {
+      self.add_phi_operands(phi)?;
     }
-    self.incomplete_phis.remove(&blk_id);
-
     // Seal the block
     self.sealed_blocks.insert(blk_id);
+    Ok(())
   }
 
   pub fn new_block(&mut self, preds: Vec<BlockId>) -> BlockId {
-    let id = self.new_blk_id();
+    let id = self.blocks.len();
     let block = Block::new(id, preds);
     self.blocks.push(block);
     id
   }
 
-  pub fn new_blk_id(&mut self) -> BlockId {
-    let n = self.blk_count;
-    self.blk_count += 1;
-    n
-  }
-
-  pub fn new_sealed_block(&mut self, preds: Vec<BlockId>) -> BlockId {
+  pub fn new_sealed_block(&mut self, preds: Vec<BlockId>) -> ConvertResult<BlockId> {
     let blk_id = self.new_block(preds);
-    self.seal_block(blk_id);
-    blk_id
+    self.seal_block(blk_id)?;
+    Ok(blk_id)
   }
 
-  pub fn convert_expr(&mut self, expr: &Expr, blk_id: BlockId) -> Rc<Operand> {
+  pub fn convert_expr(&mut self, expr: &fun::Expr, blk_id: BlockId) -> ConvertResult<Box<Expr>> {
     match expr {
-      Expr::Var { name } => self.read_var(&name, blk_id),
-      Expr::Unsigned { numb } => Rc::new(Operand::Unsigned { numb: *numb }),
-      Expr::BinOp { op, left, right } => {
-        let left = self.convert_expr(left, blk_id);
-        let right = self.convert_expr(right, blk_id);
-        Rc::new(Operand::BinOp { op: *op, left, right })
+      fun::Expr::Var { name } => {
+        let name = self.read_var(&name, blk_id)?;
+        Ok(Expr::Var { name }.into())
       }
-      _ => todo!("Other expressions not covered yet"),
+      fun::Expr::Unsigned { numb } => Ok(Expr::Unsigned { numb: *numb }.into()),
+      fun::Expr::BinOp { op, left, right } => {
+        let left = self.convert_expr(left, blk_id)?;
+        let right = self.convert_expr(right, blk_id)?;
+        Ok(Expr::BinOp { op: *op, left, right }.into())
+      }
+      _ => Err("Other expressions not covered yet".into()),
+    }
+  }
+
+  pub fn convert_pat(&mut self, expr: &fun::Expr, blk_id: BlockId) -> ConvertResult<Box<Expr>> {
+    match expr {
+      fun::Expr::Var { name } => {
+        let val = Operand::Value(Expr::Parameter.into());
+        let name = self.add_assignment(blk_id, name.clone(), val);
+        Ok(Expr::Var { name }.into())
+      }
+      fun::Expr::Ctr { name, args } => {
+        let mut args_conv = vec![];
+        for arg in args {
+          let arg = *self.convert_pat(arg, blk_id)?;
+          args_conv.push(arg);
+        }
+        Ok(Expr::Ctr { name: name.clone(), args: args_conv }.into())
+      }
+      fun::Expr::Unit => Ok(Expr::Unit.into()),
+      fun::Expr::Unsigned { numb } => Ok(Expr::Unsigned { numb: *numb }.into()),
+      _ => Err("Invalid expression in pattern".into())
+    }
+  }
+
+  pub fn add_assignment(&mut self, blk_id: BlockId, name: Id, val: Operand) -> SsaId {
+    let new_id = SsaId(self.assignments.len());
+    let assignment = Assignment {
+      id: new_id,
+      blk: blk_id,
+      var: name.clone(),
+      op: val,
+    };
+    self.assignments.push(assignment);
+    self.blocks[blk_id].assignments.push(new_id);
+    self.write_var(name, blk_id, new_id);
+    new_id
+  }
+
+  pub fn new_phi(&mut self, name: Id, blk_id: BlockId) -> SsaId {
+    let phi = Phi{ name: name.clone(), ops: vec![], users: HashSet::new() };
+    let phi_op = Operand::Phi(phi);
+    let ssa_id = self.add_assignment(blk_id, name.clone(), phi_op);
+    ssa_id
+  }
+
+  fn get_phi_ref(&mut self, phi_id: SsaId) -> Option<&mut Phi> {
+    if let Operand::Phi(phi) = &mut self.assignments[phi_id.0].op {
+      Some(phi)
+    } else {
+      None
     }
   }
 }

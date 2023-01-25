@@ -1,7 +1,7 @@
 use imp_hvm::fun::Expr as ImpExpr;
 use imp_hvm::imp::{Imp, Program as ImpProgram};
 use imp_hvm::Oper;
-use imp_hvm::{to_fun::unbound_in_stmt, CaseStmt};
+use imp_hvm::CaseStmt;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use swc_ecma_ast::{

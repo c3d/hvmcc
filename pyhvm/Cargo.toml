@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.17.3", features = ["extension-module"] }
 rustpython-parser = { features = ["lalrpop"], git = "https://github.com/RustPython/RustPython.git", rev = "f885db8c61514f069979861f6b3bd83292086231" }
 rustpython-ast = { git = "https://github.com/RustPython/RustPython.git", rev = "f885db8c61514f069979861f6b3bd83292086231" }
-hvm = "1.0.13-beta"
+hvm = "1.0.0"
 imp_hvm = { path = "../imp_hvm" }
 num-bigint = "0.4.3"
 num-traits = "0.2.15"

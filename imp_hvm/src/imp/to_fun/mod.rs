@@ -55,7 +55,7 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &str, hoisted: &mut Vec<Procedure>
     }
     Imp::ProcedureDef { name, args, body } => {
       let name = format!("{proc_name}.{name}");
-      let vars = unbound_in_stmt(body);
+      let vars = unbounds_in_stmt(body);
       let args: HashSet<Id> = args.iter().cloned().collect();
       let diff: Vec<Id> = vars.difference(&args).map(String::clone).collect();
       let new_proc = Procedure { name: name.clone(), args: diff, body: *body.clone() };
@@ -69,7 +69,7 @@ fn hoist_proc_defs(proc: &mut Imp, proc_name: &str, hoisted: &mut Vec<Procedure>
   }
 }
 
-pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
+pub fn unbounds_in_stmt(stmt: &Imp) -> HashSet<Id> {
   match stmt {
     Imp::Assignment { name, expr } => {
       let mut unbound_vars = expr.get_unbound_vars();
@@ -81,55 +81,55 @@ pub fn unbound_in_stmt(stmt: &Imp) -> HashSet<Id> {
       let mut vars = expr.get_unbound_vars();
       for CaseStmt { matched, body } in cases {
         let pat_vars = matched.get_unbound_vars();
-        let body_vars = unbound_in_stmt(body);
+        let body_vars = unbounds_in_stmt(body);
         let diff: HashSet<String> = body_vars.difference(&pat_vars).map(String::clone).collect();
         vars.extend(diff);
       }
-      vars.extend(unbound_in_stmt(default));
+      vars.extend(unbounds_in_stmt(default));
       vars
     }
     Imp::IfElse { condition, true_case, false_case } => {
       let mut vars = condition.get_unbound_vars();
-      vars.extend(unbound_in_stmt(true_case));
-      vars.extend(unbound_in_stmt(false_case));
+      vars.extend(unbounds_in_stmt(true_case));
+      vars.extend(unbounds_in_stmt(false_case));
       vars
     }
     Imp::ForElse { initialize, condition, afterthought, body, else_case } => {
-      let mut vars = unbound_in_stmt(initialize);
+      let mut vars = unbounds_in_stmt(initialize);
       vars.extend(condition.get_unbound_vars());
-      vars.extend(unbound_in_stmt(afterthought));
-      vars.extend(unbound_in_stmt(body));
-      vars.extend(unbound_in_stmt(else_case));
+      vars.extend(unbounds_in_stmt(afterthought));
+      vars.extend(unbounds_in_stmt(body));
+      vars.extend(unbounds_in_stmt(else_case));
       vars
     }
     Imp::ForInElse { target, iterator, body, else_case } => {
       let mut vars = iterator.get_unbound_vars();
-      vars.extend(unbound_in_stmt(body));
-      vars.extend(unbound_in_stmt(else_case));
+      vars.extend(unbounds_in_stmt(body));
+      vars.extend(unbounds_in_stmt(else_case));
       vars.remove(target);
       vars
     }
     Imp::WhileElse { condition, body, else_case } => {
       let mut vars = condition.get_unbound_vars();
-      vars.extend(unbound_in_stmt(body));
-      vars.extend(unbound_in_stmt(else_case));
+      vars.extend(unbounds_in_stmt(body));
+      vars.extend(unbounds_in_stmt(else_case));
       vars
     }
     // label name is not a variable
-    Imp::Label { stmt, .. } => unbound_in_stmt(stmt),
+    Imp::Label { stmt, .. } => unbounds_in_stmt(stmt),
     // neither is goto
     Imp::Goto { .. } => HashSet::new(),
     Imp::Return { value } => value.get_unbound_vars(),
     // procedure name is not a variable
     Imp::ProcedureDef { args, body, .. } => {
-      let vars = unbound_in_stmt(body);
+      let vars = unbounds_in_stmt(body);
       let args: HashSet<Id> = args.iter().cloned().collect();
       let diff: HashSet<Id> = vars.difference(&args).map(String::clone).collect();
       diff
     }
     Imp::Block { stmts } => stmts
       .iter()
-      .map(unbound_in_stmt)
+      .map(unbounds_in_stmt)
       .fold(HashSet::new(), |acc, val| acc.union(&val).map(String::clone).collect()),
     Imp::Continue | Imp::Break | Imp::Pass => HashSet::new(),
   }
